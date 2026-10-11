@@ -41,7 +41,7 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   both depend only on the protocol package, never on each other at runtime.
   The SDK's tests start a real in-process server, so they import the server
   (and its test fixtures in `packages/server/tests/`).
-- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`, `/avatar`,
+- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`, `/avatar`, `/admin`,
   `/viewer/*`). No build step; three.js and three-vrm are **vendored** in
   `packages/viewer/vendor` (refresh with `vendor/update.sh`, no CDN).
 
@@ -62,7 +62,10 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   sockets and viewers through per-connection queues. Also: the
   register/negotiate handshake, the viewer password (`auth_required` →
   `viewer_auth` message; `?token=` and `Authorization: Bearer` also work),
-  avatar upload/serve, and `/v1/world/files/*` for 3D models.
+  avatar upload/serve, and `/v1/world/files/*` for 3D models. `/v1/admin/*`
+  (the host's `/admin` page) needs `admin_password` and is 404 without one;
+  it isn't part of the wire protocol. Suspensions (`Hub.suspended`) are in
+  memory only; moves go through `World.teleport`.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A

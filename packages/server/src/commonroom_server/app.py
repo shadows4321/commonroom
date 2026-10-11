@@ -89,6 +89,8 @@ class Hub:
         self.agents = agents
         self.agent_conns: dict[str, Connection] = {}
         self.viewers: set[Connection] = set()
+        self.suspended: set[str] = set()  # AIs the host turned away on /admin, until resumed or restarted
+        self.started = time.time()
 
     def authenticate(self, token: str) -> AgentSpec | None:
         for spec in self.agents.agents.values():
@@ -105,6 +107,11 @@ class Hub:
         if expected is None:
             return True
         return isinstance(password, str) and hmac.compare_digest(expected.encode(), password.encode())
+
+    def admin_allowed(self, password: str | None) -> bool:
+        expected = self.agents.admin_password
+        return (expected is not None and isinstance(password, str)
+                and hmac.compare_digest(expected.encode(), password.encode()))
 
     def dispatch(self, batch: Batch) -> None:
         if not batch:
@@ -210,6 +217,8 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                                           f"{', '.join(SUPPORTED_VERSIONS)}; you offered {hello.get('protocol')!r}.")
         elif (spec := hub.authenticate(hello.get("token", ""))) is None:
             error = ("unauthorized", "Unknown token.")
+        elif spec.id in hub.suspended:
+            error = ("unauthorized", "The host has suspended this AI.")
         if error:
             await ws.send_json({"type": ERROR, "id": hello.get("id") if isinstance(hello, dict) else None,
                                 "reason": error[0], "message": error[1],
@@ -345,6 +354,109 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             return _problem(401, "unauthorized", "Send your AI's token as 'Authorization: Bearer <token>'.")
         return {"avatar": replace_avatar(spec, None)}
 
+    # ------------------------------------------------------------- admin
+    # The host's /admin page. Off unless agents.yaml has an admin_password; not part of the
+    # wire protocol (AIs and viewers never use it).
+
+    async def require_admin(request: Request) -> None:
+        if hub.agents.admin_password is None:
+            raise HTTPException(404, "the admin page is off: set admin_password in agents.yaml")
+        if not hub.admin_allowed(_bearer(request)):
+            await asyncio.sleep(AUTH_FAILURE_DELAY)
+            raise HTTPException(401, "wrong admin password")
+
+    def admin_agent(agent_id: str) -> AgentSpec:
+        spec = hub.agents.agents.get(agent_id)
+        if spec is None:
+            raise HTTPException(404, f"no AI {agent_id!r} in agents.yaml")
+        return spec
+
+    def admin_status() -> dict:
+        world = hub.world
+        people = []
+        for eid in dict.fromkeys([*hub.agents.agents, *world.entities]):
+            spec, e = hub.agents.agents.get(eid), world.entities.get(eid)
+            people.append({
+                "id": eid,
+                "name": e.name if e else spec.name,
+                "description": e.description if e else spec.description,
+                "in_agents_file": spec is not None,
+                "connected": eid in hub.agent_conns,
+                "suspended": eid in hub.suspended,
+                "room": e.room if e else None,
+                "room_name": world.rooms[e.room].name if e else None,
+                "home": world.home_of(spec) if spec else None,
+                "holding": [world.obj_name(o) for o in world.held_by(eid)] if e else [],
+                "avatar": e.avatar if e else None,
+            })
+        return {
+            "world": world.config.name,
+            "server_version": SERVER_VERSION,
+            "protocol_version": PROTOCOL_VERSION,
+            "uptime_seconds": int(time.time() - hub.started),
+            "clock": world.clock.view(),
+            "viewers": len(hub.viewers),
+            "public_viewer": hub.agents.viewer_password is None,
+            "persistent": store is not None,
+            "counts": {"rooms": len(world.rooms), "objects": len(world.objects), "people": len(world.entities)},
+            "rooms": [{"id": r.id, "name": r.name, "area": r.area} for r in world.rooms.values()],
+            "agents": people,
+        }
+
+    @app.get(f"{API_PREFIX}/admin")
+    async def admin_get(request: Request):
+        await require_admin(request)
+        return admin_status()
+
+    @app.post(f"{API_PREFIX}/admin/agents/{{agent_id}}/move")
+    async def admin_move(request: Request, agent_id: str):
+        """Put an AI in a room: body {"room": "<room id>"}, or {"room": null} to send it home."""
+        await require_admin(request)
+        spec = admin_agent(agent_id)
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict) or not (body.get("room") is None or isinstance(body.get("room"), str)):
+            return _problem(400, "bad_request", 'Send {"room": "<room id>"}.')
+        hub.world.ensure_entity(spec)
+        try:
+            hub.world.teleport(spec.id, body.get("room") or hub.world.home_of(spec))
+        except Failure as f:
+            hub.world.commit()
+            return _problem(404, f.reason, f.message)
+        hub.dispatch(hub.world.commit())
+        log.info("admin moved %s to %s", spec.id, hub.world.entities[spec.id].room)
+        return admin_status()
+
+    @app.post(f"{API_PREFIX}/admin/agents/{{agent_id}}/suspend")
+    async def admin_suspend(request: Request, agent_id: str):
+        """Disconnect an AI and refuse its token until resumed (or the server restarts)."""
+        await require_admin(request)
+        spec = admin_agent(agent_id)
+        hub.suspended.add(spec.id)
+        conn = hub.agent_conns.get(spec.id)
+        if conn is not None:
+            conn.send({"type": ERROR, "reason": "unauthorized", "message": "The host has suspended this AI."})
+            await conn.close(4401)  # the socket handler then marks it asleep
+        log.info("admin suspended %s", spec.id)
+        return admin_status()
+
+    @app.post(f"{API_PREFIX}/admin/agents/{{agent_id}}/resume")
+    async def admin_resume(request: Request, agent_id: str):
+        await require_admin(request)
+        hub.suspended.discard(admin_agent(agent_id).id)
+        log.info("admin resumed %s", agent_id)
+        return admin_status()
+
+    @app.delete(f"{API_PREFIX}/admin/agents/{{agent_id}}/avatar")
+    async def admin_remove_avatar(request: Request, agent_id: str):
+        await require_admin(request)
+        spec = admin_agent(agent_id)
+        replace_avatar(spec, None)
+        log.info("admin removed %s's avatar", spec.id)
+        return admin_status()
+
     # 3D models named in the world config, and nothing else from the world directory.
     world_dir = world_config.world_dir.resolve() if world_config.world_dir else None
     world_files = {a.model.relative_to(world_dir).as_posix(): a.model
@@ -384,6 +496,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         @app.get("/avatar")
         async def avatar_page():
             return FileResponse(viewer_dir / "avatar.html")
+
+        @app.get("/admin")
+        async def admin_page():
+            return FileResponse(viewer_dir / "admin.html")
 
         app.mount("/viewer", StaticFiles(directory=viewer_dir), name="viewer")
 

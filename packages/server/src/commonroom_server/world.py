@@ -446,6 +446,24 @@ class World:
         self._touch(e)
         self._emit(PRESENCE, e.room, {"entity": e.id, "entity_name": e.name, "online": False})
 
+    def teleport(self, entity_id: str, room: str) -> None:
+        """Put someone in a room directly, without an exit (the host's /admin page)."""
+        e = self.entities[entity_id]
+        if room not in self.rooms:
+            raise Failure(Reason.NO_SUCH_PLACE, f"There is no room {room!r}.")
+        if room == e.room:
+            return
+        old = e.room
+        self._emit(LEFT_ROOM, old, {"entity": e.id, "entity_name": e.name, "to": room,
+                                    "to_name": self.rooms[room].name, "via": None})
+        e.room, e.near, e.pose = room, None, None
+        self._touch(e)
+        self._emit(ENTERED_ROOM, room, {"entity": e.id, "entity_name": e.name, "from": old,
+                                        "from_name": self.rooms[old].name, "via": None,
+                                        "entity_view": self.entity_view(e)})
+        for held in self.held_by(e.id):
+            self._touch(held)
+
     def any_online(self) -> bool:
         return any(e.online for e in self.entities.values())
 

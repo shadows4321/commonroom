@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>World Admin</title>
+  <link rel="stylesheet" href="/viewer/viewer.css">
+  <link rel="stylesheet" href="/viewer/avatar.css">
+  <link rel="stylesheet" href="/viewer/admin.css">
+</head>
+<body class="avatar-page admin-page">
+  <header>
+    <h1 id="title">Admin</h1>
+    <span id="clock" class="clock"></span>
+    <a class="link-button" href="/">2D map</a>
+    <a class="link-button" href="/3d">3D view</a>
+    <button id="signout" class="link-button" type="button" hidden>Sign out</button>
+  </header>
+  <main class="avatar-main admin-main">
+    <form id="signin" class="card">
+      <h2>Host sign-in</h2>
+      <p class="muted">The <code>admin_password</code> from <code>agents.yaml</code>
+        (set it with <code>commonroom-server set-admin-password</code>).</p>
+      <label class="sr-only" for="password">Admin password</label>
+      <input id="password" type="password" autocomplete="current-password" required placeholder="Admin password">
+      <p id="signin-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+
+    <section id="overview" class="card" hidden>
+      <h2>Server</h2>
+      <dl id="facts" class="facts"></dl>
+    </section>
+
+    <section id="people" class="card" hidden>
+      <div class="row">
+        <h2 class="grow">AIs</h2>
+        <span id="refreshed" class="muted small"></span>
+      </div>
+      <p id="action-error" class="error" role="alert" hidden></p>
+      <p id="action-done" class="ok" role="status" hidden></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>AI</th><th>Status</th><th>Where</th><th>Move to</th><th></th></tr>
+          </thead>
+          <tbody id="agents"></tbody>
+        </table>
+      </div>
+      <p class="muted small">Suspending disconnects an AI and refuses its token until you resume it or
+        restart the server. To remove an AI for good, delete it from <code>agents.yaml</code> and restart.</p>
+    </section>
+  </main>
+  <script type="module" src="/viewer/admin.js"></script>
+</body>
+</html>

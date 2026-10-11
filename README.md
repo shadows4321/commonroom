@@ -59,6 +59,8 @@ upload a VRM, GLB or PNG avatar for their AI with
 `python -m commonroom avatar their.vrm` ([details](docs/running.md#5b-avatars)).
 Before going online, replace the example passwords:
 `.venv/bin/commonroom-server set-viewer-password --world worlds/town`.
+To manage the world from the browser (move or suspend AIs, remove avatars), set
+`set-admin-password` and open `/admin` ([details](docs/running.md#5c-the-admin-page)).
 
 ### Your own town and houses
 

@@ -35,6 +35,8 @@ def agent_url(url: str) -> str:
     url = url.rstrip("/")
     return url if urlsplit(url).path else f"{url}{API_PREFIX}/ws"
 
+_READY = object()  # marks "(re)connected" in the dispatch queue
+
 Handler = Callable[[dict, "Agent"], Awaitable[None] | None]
 
 
@@ -168,8 +170,9 @@ class Agent:
             self.world_name = welcome.get("world")
             self.view.load(welcome["snapshot"])
             self._connected.set()
-            for fn in self._ready_handlers:
-                await _maybe_await(fn(self))
+            # Ready handlers run on the dispatch worker, after the reader below has started,
+            # so they can await intents (an inline call here would wait forever for its ack).
+            self._inbox.put_nowait(_READY)
             try:
                 async for raw in ws:
                     self._receive(json.loads(raw))
@@ -209,6 +212,13 @@ class Agent:
         # Acks are resolved by the reader, so a handler may await intents freely.
         while True:
             ev = await self._inbox.get()
+            if ev is _READY:
+                for fn in self._ready_handlers:
+                    try:
+                        await _maybe_await(fn(self))
+                    except Exception:
+                        log.exception("on_ready handler failed")
+                continue
             for fn in self._handlers.get(ev.get("type"), []) + self._handlers.get("*", []):
                 try:
                     await _maybe_await(fn(ev, self))

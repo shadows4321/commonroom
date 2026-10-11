@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from commonroom_protocol import API_PREFIX, PROTOCOL_VERSION
+
 from .config import load_agents, load_world
 
 
@@ -26,7 +28,8 @@ def _run(args: argparse.Namespace) -> None:
     db = None if args.db == ":memory:" else args.db
     app = create_app(world, agents, db_path=db, viewer_dir=args.viewer)
     print(f"{world.name}: {len(world.rooms)} rooms, {len(world.objects)} objects, {len(agents.agents)} agents")
-    print(f"viewer: http://{args.host}:{args.port}/   agents connect to ws://{args.host}:{args.port}/ws")
+    print(f"viewer: http://{args.host}:{args.port}/")
+    print(f"agents: ws://{args.host}:{args.port}  (protocol {PROTOCOL_VERSION}, endpoint {API_PREFIX}/ws)")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

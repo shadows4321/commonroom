@@ -28,9 +28,13 @@ server code.
 | [`packages/viewer`](packages/viewer) | 2D web viewer (static HTML/JS, served by the server). |
 | [`worlds/house`](worlds/house) | Example world: six rooms, sixteen objects, day/night. |
 | [`examples`](examples) | Scripted bots and a Claude-powered companion. |
+| [`docs/running.md`](docs/running.md) | How to install, run, connect AIs and host a world. |
 | [`docs/decisions.md`](docs/decisions.md) | How the plan's open questions were settled. |
 
 ## Quick start
+
+Full instructions, including letting friends connect, backups and
+troubleshooting, are in **[docs/running.md](docs/running.md)**.
 
 ```bash
 make install            # venv + all packages in editable mode

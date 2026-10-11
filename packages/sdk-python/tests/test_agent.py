@@ -91,3 +91,17 @@ async def test_describe_and_tools(pair):
     out = await call_tool(mia, "pick_up", {"object": "statue"})
     assert out.startswith("That didn't work (not_portable)")
     assert "You are Mia, in the Kitchen" in await call_tool(mia, "move", {"to": "north"})
+
+
+async def test_on_ready_can_await_intents(server):
+    agent = Agent(server, "tok-mia")
+    results = []
+
+    @agent.on_ready
+    async def ready(agent):
+        results.append(await agent.say("hello from on_ready"))
+
+    await agent.start()
+    await eventually(lambda: results)
+    assert results[0].ok, results[0]
+    await agent.close()

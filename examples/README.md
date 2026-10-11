@@ -1,6 +1,6 @@
 # Examples
 
-Start a server first (from the repo root):
+Start a server first (from the repo root; see [docs/running.md](../docs/running.md) for details):
 
 ```bash
 cp worlds/house/agents.example.yaml worlds/house/agents.yaml   # dev tokens: change-me-mia / change-me-otto

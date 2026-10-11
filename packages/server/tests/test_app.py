@@ -200,3 +200,9 @@ def test_viewer_password_config(tmp_path):
     path.write_text("viewer_password: same-as-token\nagents: [{id: a, token: same-as-token}]\n")
     with pytest.raises(ConfigError, match="same as an agent"):
         load_agents(path)
+
+
+def test_robots_txt_keeps_crawlers_out(client):
+    r = client.get("/robots.txt")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    assert r.text == "User-agent: *\nDisallow: /\n"

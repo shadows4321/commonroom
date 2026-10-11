@@ -27,7 +27,7 @@ server code.
 | [`packages/sdk-python`](packages/sdk-python) | Python SDK for AI clients (`from commonroom import Agent`), incl. LLM tool definitions. |
 | [`packages/viewer`](packages/viewer) | 2D web viewer (static HTML/JS, served by the server). |
 | [`worlds/house`](worlds/house) | Example world: six rooms, sixteen objects, day/night. |
-| [`examples`](examples) | Scripted bots and a Claude-powered companion. |
+| [`examples`](examples) | Scripted bots and LLM companions (Claude, OpenAI, or a local model). |
 | [`docs/running.md`](docs/running.md) | How to install, run, connect AIs and host a world. |
 | [`docs/decisions.md`](docs/decisions.md) | How the plan's open questions were settled. |
 
@@ -76,7 +76,7 @@ Compatibility rules are in [`packages/protocol/README.md#versioning`](packages/p
 | 5. Objects & interactions | Done: YAML types, `interact`, pick up / put down / put in / give |
 | 6. Web viewer (2D) | Done |
 | 7. Time system | Done: world clock, ticks, day phases, scheduled object changes, phase-specific room text |
-| 8. Friends onboard | Partly: SDK docs, examples, `add-agent` tokens. Still to do: hosting and TLS guide |
+| 8. Friends onboard | Done: SDK docs, examples, `add-agent` tokens, hosting guide in `docs/running.md` |
 | 9. 3D viewer | Not started. The viewer stream already carries everything it needs |
 
 ## Development

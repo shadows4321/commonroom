@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from commonroom import Agent, FatalError, call_tool, tool_schemas
+from commonroom import Agent, FatalError, call_tool, is_failure, openai_tool_schemas, tool_schemas
 from commonroom_protocol import PROTOCOL_VERSION
 
 
@@ -54,13 +54,21 @@ async def test_handlers_and_speech(pair):
 
 async def test_polite_say_reports_what_was_missed(pair):
     mia, otto = pair
-    mia.view.last_speech_seq = 0
-    assert await otto.say("me first")
-    await asyncio.sleep(0.05)
-    mia.view.last_speech_seq = 0  # pretend mia's LLM started composing before otto spoke
-    result = await mia.say("hello", polite=True)
+    mia.describe()  # mia's model reads the room...
+    assert await otto.say("me first")  # ...otto speaks while it is still thinking...
+    await eventually(lambda: mia.view.last_speech_seq == 1)
+    result = await mia.say("hello", polite=True)  # ...so its answer is bounced
     assert not result and result.reason == "conversation_moved_on"
     assert result.details["missed"][0]["text"] == "me first"
+    assert await mia.say("oh, hi otto", polite=True)  # the missed line now counts as heard
+
+
+async def test_after_seq_answers_a_specific_line(pair):
+    mia, otto = pair
+    assert await otto.say("anyone there?")
+    assert await otto.say("hello??")
+    assert not await mia.say("yes!", after_seq=1)  # a reply to line 1, but line 2 came since
+    assert await mia.say("yes, hi!", after_seq=2)
 
 
 async def test_view_tracks_objects_and_people(pair):
@@ -105,3 +113,25 @@ async def test_on_ready_can_await_intents(server):
     await eventually(lambda: results)
     assert results[0].ok, results[0]
     await agent.close()
+
+
+def test_openai_tool_schemas_mirror_anthropic_ones():
+    anthropic_tools, openai_tools = tool_schemas(), openai_tool_schemas()
+    assert len(openai_tools) == len(anthropic_tools)
+    for a, o in zip(anthropic_tools, openai_tools):
+        assert o["type"] == "function"
+        assert o["function"] == {"name": a["name"], "description": a["description"], "parameters": a["input_schema"]}
+
+
+async def test_call_tool_is_polite_and_reports_bad_calls(pair):
+    mia, otto = pair
+    mia.describe()
+    assert await otto.say("me first")
+    await eventually(lambda: mia.view.last_speech_seq == 1)
+    out = await call_tool(mia, "say", {"text": "hello"})
+    assert is_failure(out) and "conversation_moved_on" in out and 'Otto: "me first"' in out
+    assert not is_failure(await call_tool(mia, "say", {"text": "hello"}))
+    assert "unknown_tool" in await call_tool(mia, "dance", {})
+    assert "bad_request" in await call_tool(mia, "say", {})
+    assert "bad_request" in await call_tool(mia, "give", {"object": "box", "bogus": 1})
+    assert "bad_request" in await call_tool(mia, "look", ["not", "a", "dict"])

@@ -250,11 +250,24 @@ class Agent:
         return await self.request(MOVE, to=to, near=near)
 
     async def say(self, text: str, *, polite: bool = False, after_seq: int | None = None) -> Result:
-        """Speak to everyone in the room. With polite=True the server rejects the line
-        (reason "conversation_moved_on") if someone spoke since you last heard the room."""
+        """Speak to everyone in the room.
+
+        To avoid talking over people, the server can reject the line (reason
+        "conversation_moved_on", with the missed lines in result.details["missed"])
+        if someone spoke after a given point:
+          - after_seq=event["seq"]: "only if nobody spoke after this line" (for event handlers);
+          - polite=True: "only if nobody spoke since I last looked", i.e. since the last
+            describe() / view.mark_heard(). This is the one for LLMs, whose prompt is built
+            with describe() some seconds before they answer.
+        """
         if polite and after_seq is None:
-            after_seq = self.view.last_speech_seq
-        return await self.request(SAY, text=text, after_seq=after_seq)
+            heard = self.view.heard_seq
+            after_seq = self.view.last_speech_seq if heard is None else heard
+        result = await self.request(SAY, text=text, after_seq=after_seq)
+        if result.reason == Reason.CONVERSATION_MOVED_ON:
+            # The caller now has the missed lines, so they count as heard.
+            self.view.mark_heard(result.details.get("last_speech_seq"))
+        return result
 
     async def whisper(self, to: str, text: str) -> Result:
         return await self.request(WHISPER, to=to, text=text)

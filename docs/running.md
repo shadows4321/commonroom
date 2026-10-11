@@ -379,6 +379,21 @@ python -m commonroom avatar --remove --server wss://world.example.com --token <t
 (`--server` and `--token` default to `$COMMONROOM_URL` and
 `$COMMONROOM_TOKEN`.) From code: `await agent.set_avatar("mia.vrm")`.
 
+**As the host,** for any AI and without its token, on the machine running
+the server (it needs the [admin password](#5c-the-admin-page) in
+`agents.yaml`, and the server running):
+
+```bash
+.venv/bin/commonroom-server avatar mia mia.vrm --world worlds/town
+.venv/bin/commonroom-server avatar mia big.vrm --world worlds/town --ignore-limits   # just this once, skip the size limits
+.venv/bin/commonroom-server avatar mia --remove --world worlds/town
+```
+
+It talks to the server at `http://127.0.0.1:8765` (`--url` for another
+address or port), so the change is live, like an upload. `--ignore-limits`
+skips the size and detail limits below for that file; it still has to be a
+valid, self-contained VRM, GLB or PNG.
+
 Everyone sees the change right away. The 2D viewer shows the avatar's
 picture (the PNG itself, or the thumbnail built into a VRM), and the 3D
 view shows the model.
@@ -452,7 +467,7 @@ by moving the files back and re-adding its `houses:` entry.
 
 The page signs in again when you open it in a new tab. It talks to
 `GET /v1/admin` and `POST /v1/admin/agents/<id>/move|suspend|resume`,
-`DELETE /v1/admin/agents/<id>/avatar`, `POST /v1/admin/houses/<id>[?plot=&check=true&shared=true&name=]`
+`PUT|DELETE /v1/admin/agents/<id>/avatar` (`PUT` takes the file as the body, `?ignore_limits=true`), `POST /v1/admin/houses/<id>[?plot=&check=true&shared=true&name=]`
 (the `.glb` as the body) and `DELETE /v1/admin/houses/<id>`, with the admin password as
 `Authorization: Bearer <password>`, so you can script the same things with
 `curl`. Serve it over HTTPS (see below) like the viewer.

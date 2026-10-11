@@ -55,6 +55,13 @@ class AvatarLimits:
                 setattr(limits, key, int(raw[key]))
         return limits
 
+    @classmethod
+    def generous(cls) -> "AvatarLimits":
+        """For the host (`commonroom-server avatar --ignore-limits`): files must still be
+        well-formed and self-contained, but size and detail are up to them."""
+        return cls(max_model_bytes=1024 ** 3, max_png_bytes=256 * 1024 ** 2, max_png_side=16384,
+                   max_texture_side=16384, max_vertices=50_000_000)
+
     @property
     def max_upload_bytes(self) -> int:
         return max(self.max_model_bytes, self.max_png_bytes)

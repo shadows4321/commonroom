@@ -1,4 +1,4 @@
-"""Command line: `commonroom-server run`, `add-agent`, the passwords, `import-glb` and `remove-house`."""
+"""Command line: `commonroom-server run`, `add-agent`, the passwords, `import-glb`, `remove-house` and `avatar`."""
 
 from __future__ import annotations
 
@@ -177,6 +177,55 @@ def _import_glb(args: argparse.Namespace) -> None:
           "then restart the server.")
 
 
+def _avatar(args: argparse.Namespace) -> None:
+    """Set or remove an AI's avatar on the running server, as the host (the admin password)."""
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    from .config import load_agents
+
+    agents = load_agents(Path(args.agents or Path(args.world) / "agents.yaml"))
+    if not agents.admin_password:
+        sys.exit(f"this needs the admin password: set one with "
+                 f"`commonroom-server set-admin-password --world {args.world}` and restart the server")
+    if bool(args.file) == args.remove:
+        sys.exit("give an avatar file (.vrm, .glb or .png), or --remove")
+    base = re.sub(r"^ws", "http", args.url.rstrip("/"))
+    url = f"{base}{API_PREFIX}/admin/agents/{urllib.parse.quote(args.agent)}/avatar"
+    headers = {"Authorization": f"Bearer {agents.admin_password}"}
+    if args.remove:
+        req = urllib.request.Request(url, method="DELETE", headers=headers)
+    else:
+        try:
+            data = Path(args.file).read_bytes()
+        except OSError as exc:
+            sys.exit(f"can't read {args.file}: {exc}")
+        if args.ignore_limits:
+            url += "?ignore_limits=true"
+        req = urllib.request.Request(url, data=data, method="PUT",
+                                     headers={**headers, "Content-Type": "application/octet-stream"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as res:
+            body = json.load(res)
+    except urllib.error.HTTPError as exc:
+        try:
+            problem = json.load(exc)
+        except ValueError:
+            problem = {}
+        sys.exit(f"the server said {exc.code}: {problem.get('message') or problem.get('detail') or exc.reason}")
+    except OSError as exc:
+        sys.exit(f"can't reach the server at {base} ({exc}). Is it running? (--url to point elsewhere)")
+    avatar = body.get("avatar")
+    if avatar is None:
+        print(f"removed {args.agent}'s avatar")
+    else:
+        title = (avatar.get("meta") or {}).get("title")
+        print(f"{args.agent} now has a {avatar['kind']} avatar{f' ({title})' if title else ''}, "
+              f"{avatar['bytes']:,} bytes; everyone watching sees it now")
+
+
 def _remove_house(args: argparse.Namespace) -> None:
     from .scene_import import ImportProblem, uninstall_house
 
@@ -255,6 +304,19 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument("--check", action="store_true",
                      help="only report problems (exit status 1 if there are any); write nothing")
     imp.set_defaults(func=_import_glb)
+
+    av = sub.add_parser("avatar", help="set (or --remove) an AI's avatar on the running server, as the host")
+    av.add_argument("agent", help="the AI's id (as in agents.yaml)")
+    av.add_argument("file", nargs="?", help="a .vrm, .glb or .png file")
+    av.add_argument("--remove", action="store_true", help="remove the avatar instead")
+    av.add_argument("--world", required=True, help="world directory (for agents.yaml and its admin password)")
+    av.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
+    av.add_argument("--url", default="http://127.0.0.1:8765",
+                    help="the running server (default: http://127.0.0.1:8765)")
+    av.add_argument("--ignore-limits", action="store_true",
+                    help="skip the world's size and detail limits for this file (it must still be a valid, "
+                         "self-contained model)")
+    av.set_defaults(func=_avatar)
 
     rm = sub.add_parser("remove-house", help="take a house out of the town and free its plot "
                                              "(its files move to houses/removed/)")

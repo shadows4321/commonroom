@@ -469,7 +469,11 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         if spec is None:
             await asyncio.sleep(AUTH_FAILURE_DELAY)
             return _problem(401, "unauthorized", "Send your AI's token as 'Authorization: Bearer <token>'.")
-        limit = avatar_limits.max_upload_bytes
+        return await receive_avatar(request, spec, avatar_limits)
+
+    async def receive_avatar(request: Request, spec: AgentSpec, limits: AvatarLimits):
+        """Read, check and store an uploaded avatar, then give it to `spec`'s entity."""
+        limit = limits.max_upload_bytes
         declared = request.headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > limit:
             return _problem(413, "too_large", f"Avatars can be at most {limit // (1024 * 1024)} MB.")
@@ -480,7 +484,7 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                 return _problem(413, "too_large", f"Avatars can be at most {limit // (1024 * 1024)} MB.")
         data = bytes(body)
         try:
-            info = await asyncio.to_thread(avatars.inspect, data, avatar_limits)
+            info = await asyncio.to_thread(avatars.inspect, data, limits)
         except AvatarError as exc:
             return _problem(_AVATAR_STATUS.get(exc.reason, 422), exc.reason, exc.message)
         await asyncio.to_thread(avatar_store.save, info, data)
@@ -596,6 +600,17 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         hub.suspended.discard(admin_agent(agent_id).id)
         log.info("admin resumed %s", agent_id)
         return admin_status()
+
+    @app.put(f"{API_PREFIX}/admin/agents/{{agent_id}}/avatar")
+    async def admin_set_avatar(request: Request, agent_id: str, ignore_limits: bool = Query(default=False)):
+        """Set an AI's avatar for them (`commonroom-server avatar`): the body is the file.
+        ?ignore_limits=true skips the world's size and detail limits (not the safety checks)."""
+        await require_admin(request)
+        spec = admin_agent(agent_id)
+        result = await receive_avatar(request, spec, AvatarLimits.generous() if ignore_limits else avatar_limits)
+        if isinstance(result, JSONResponse):
+            return result
+        return {**result, "status": admin_status()}
 
     @app.delete(f"{API_PREFIX}/admin/agents/{{agent_id}}/avatar")
     async def admin_remove_avatar(request: Request, agent_id: str):

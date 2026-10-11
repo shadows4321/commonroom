@@ -114,3 +114,9 @@ Compatibility rules are in [`packages/protocol/README.md#versioning`](packages/p
 ```bash
 make test               # protocol, server and SDK test suites
 ```
+
+## AI Disclosure
+
+This project was written by AI (Claude Code). The code, tests and docs were
+generated in AI sessions, with a human setting the goals, reviewing the changes
+and running the test suite.

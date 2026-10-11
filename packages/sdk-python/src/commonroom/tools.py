@@ -1,8 +1,9 @@
 """LLM tool definitions for an Agent, so a model can act in the world through tool calls.
 
-The schemas use the common {name, description, input_schema} shape, which the
-Anthropic Messages API accepts directly and other providers accept with
-minor renaming.
+`tool_schemas()` returns {name, description, input_schema}, the shape the
+Anthropic Messages API takes. `openai_tool_schemas()` returns the same tools
+in the OpenAI Chat Completions shape, which most OpenAI-compatible servers
+(Ollama, LM Studio, vLLM, ...) also accept.
 """
 
 from __future__ import annotations
@@ -78,19 +79,41 @@ TOOLS: list[dict[str, Any]] = [
 
 
 def tool_schemas() -> list[dict[str, Any]]:
+    """Tools in the Anthropic shape: {name, description, input_schema}."""
     return [dict(t) for t in TOOLS]
 
 
-async def call_tool(agent: Agent, name: str, args: dict[str, Any]) -> str:
-    """Run a tool call against the world and return a short text result for the model."""
-    method = {t["name"] for t in TOOLS}
-    if name not in method:
-        return f"Unknown tool {name!r}."
+def openai_tool_schemas() -> list[dict[str, Any]]:
+    """Tools in the OpenAI Chat Completions shape: {type: function, function: {name, description, parameters}}."""
+    return [{"type": "function",
+             "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
+            for t in TOOLS]
+
+
+async def call_tool(agent: Agent, name: str, args: dict[str, Any], *, polite: bool = True) -> str:
+    """Run a tool call against the world and return a short text result for the model.
+
+    With polite=True (the default), `say` refuses to talk over someone who spoke
+    while the model was thinking: the result lists what was missed so the model
+    can respond to it instead.
+    """
+    if name not in {t["name"] for t in TOOLS}:
+        return f"That didn't work (unknown_tool): there is no tool called {name!r}."
+    if not isinstance(args, dict):
+        return f"That didn't work (bad_request): arguments for {name} must be an object."
     try:
-        result: Result = await getattr(agent, name)(**(args or {}))
-    except TypeError as exc:
-        return f"Bad arguments for {name}: {exc}"
+        if name == "say":
+            result: Result = await agent.say(args["text"], polite=polite)
+        else:
+            result = await getattr(agent, name)(**args)
+    except (TypeError, KeyError) as exc:
+        return f"That didn't work (bad_request): bad arguments for {name}: {exc}"
     return describe_result(agent, name, result)
+
+
+def is_failure(text: str) -> bool:
+    """True if a call_tool result reports a failed action (for tool-result error flags)."""
+    return text.startswith("That didn't work")
 
 
 def describe_result(agent: Agent, name: str, result: Result) -> str:

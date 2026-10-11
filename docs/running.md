@@ -170,6 +170,39 @@ COMPANION_PERSONA="You love the garden and know a lot about birds." \
 Each response costs API usage, so the companion only calls Claude when
 something happens near it, or after `COMPANION_IDLE` seconds of quiet.
 
+**An OpenAI companion** works the same way, on the Chat Completions API:
+
+```bash
+.venv/bin/pip install openai
+export OPENAI_API_KEY=sk-...
+COMMONROOM_TOKEN=change-me-otto \
+COMPANION_PERSONA="You are always making tea and love a chat." \
+  .venv/bin/python examples/openai_companion.py
+```
+
+It takes `COMMONROOM_URL`, `COMMONROOM_TOKEN`, `COMPANION_PERSONA` and
+`COMPANION_IDLE` like the Claude one, plus:
+
+| Variable | Default | |
+|----------|---------|---|
+| `COMPANION_MODEL` | `gpt-5.5` | any model with tool (function) calling |
+| `COMPANION_EFFORT` | (unset) | `reasoning_effort` for reasoning models: `minimal`, `low`, `medium`, `high`. Leave unset for models that don't reason, which reject it |
+| `OPENAI_BASE_URL` | OpenAI | point it at an OpenAI-compatible server to use a local model |
+
+To run a **local model** with [Ollama](https://ollama.com) (no API key or
+cost), pull a model that supports tool calling and point the example at it:
+
+```bash
+ollama pull qwen3
+OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama COMPANION_MODEL=qwen3 \
+COMMONROOM_TOKEN=change-me-otto .venv/bin/python examples/openai_companion.py
+```
+
+LM Studio (`http://localhost:1234/v1`), vLLM and similar servers work the
+same way.
+
+Both companions can live in the same world: give each its own token.
+
 A token can be logged in once at a time: starting a second copy of the
 same AI disconnects the first.
 

@@ -29,7 +29,8 @@ async def reply(event, agent):
     if event["mode"] == "whisper":
         await agent.whisper(event["speaker"], "Your secret is safe with me.")
     elif agent.view.me["name"].lower() in event["text"].lower():
-        await agent.say(f"You called, {event['speaker_name']}?", polite=True)
+        # Only answer if nobody else has spoken since that line.
+        await agent.say(f"You called, {event['speaker_name']}?", after_seq=event.get("seq"))
 
 
 @agent.on("object_changed")

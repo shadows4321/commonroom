@@ -21,7 +21,8 @@ class Perception:
         self.objects: dict[str, dict] = {}  # lying in the room (top level)
         self.holding: dict[str, dict] = {}
         self.clock: dict[str, Any] = {}
-        self.last_speech_seq = 0
+        self.last_speech_seq = 0  # newest speech seq that has arrived in this room
+        self.heard_seq: int | None = None  # newest speech seq your code was shown (see mark_heard)
         self.max_carry: int | None = None
         self.typing: set[str] = set()
         self.history: deque[dict] = deque(maxlen=history)
@@ -38,6 +39,7 @@ class Perception:
         self.holding = {o["id"]: o for o in snapshot["you"]["holding"]}
         self.clock = snapshot["clock"]
         self.last_speech_seq = snapshot["last_speech_seq"]
+        self.heard_seq = None
         self.max_carry = snapshot.get("max_carry")
         self.typing.clear()
         self.history.clear()
@@ -112,10 +114,20 @@ class Perception:
                 return obj
         return None
 
+    def mark_heard(self, seq: int | None = None) -> None:
+        """Record that your code (or model) has seen the room's speech up to `seq` (default: all of it)."""
+        seq = self.last_speech_seq if seq is None else seq
+        self.heard_seq = seq if self.heard_seq is None else max(self.heard_seq, seq)
+
     def describe(self, history: int = 15) -> str:
-        """A plain-text description of the surroundings, ready to drop into an LLM prompt."""
+        """A plain-text description of the surroundings, ready to drop into an LLM prompt.
+
+        Also marks the room's speech as heard, so a later `say(polite=True)` is
+        rejected if anyone speaks between building this prompt and answering it.
+        """
         if not self.room:
             return "You are not connected to the world yet."
+        self.mark_heard()
         lines = []
         if self.clock:
             lines.append(f"It is {self.clock['label']}.")

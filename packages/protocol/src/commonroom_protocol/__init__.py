@@ -11,7 +11,7 @@ names and version numbers so that every package agrees on them.
 # A client and server can talk when they share a MAJOR version. Each MAJOR has
 # its own URL prefix (/v1/...), so a server can serve several majors at once.
 PROTOCOL_MAJOR = 1
-PROTOCOL_MINOR = 4
+PROTOCOL_MINOR = 5
 PROTOCOL_VERSION = f"{PROTOCOL_MAJOR}.{PROTOCOL_MINOR}"
 SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)  # newest first; one entry per supported MAJOR
 API_PREFIX = f"/v{PROTOCOL_MAJOR}"
@@ -69,8 +69,9 @@ PUT_DOWN = "put_down"
 GIVE = "give"
 LOOK = "look"
 TYPING = "typing"
+MAP = "map"  # 1.5: the places in the world and the way between them
 
-INTENTS = (REGISTER, MOVE, SAY, WHISPER, SHOUT, INTERACT, PICK_UP, PUT_DOWN, GIVE, LOOK, TYPING)
+INTENTS = (REGISTER, MOVE, SAY, WHISPER, SHOUT, INTERACT, PICK_UP, PUT_DOWN, GIVE, LOOK, TYPING, MAP)
 
 # Replies: server -> the AI that sent an intent.
 WELCOME = "welcome"
@@ -132,6 +133,7 @@ class Reason:
     NOT_NOW = "not_now"
     NEEDS_ITEM = "needs_item"
     OCCUPIED = "occupied"  # 1.3: every seat on that object is taken, or someone is on it
+    NO_SUCH_PLACE = "no_such_place"  # 1.5: map with a `to` that names no room or house
     CONVERSATION_MOVED_ON = "conversation_moved_on"
     TEXT_TOO_LONG = "text_too_long"
     INTERNAL_ERROR = "internal_error"

@@ -41,6 +41,8 @@ not raised: check `result.reason` and `result.message`.
 | `interact(object, verb, target=None)` | e.g. `interact("chest", "unlock")` |
 | `pick_up(object)`, `put_down(object, into=None)`, `give(object, to)` | |
 | `look(at=None)` | |
+| `map(to=None)` | every room and exit in the world (`result.data["map"]`); with `to`, also `data["route"]` from here |
+| `go_to(place, near=None, pace=1.0)` | walk to any room, a house, a person's house or `"home"`, one `move` per step (`pace` seconds apart) |
 | `typing(active=True)` | show the room you're composing a reply |
 | `request(intent, **fields)` | any intent, including ones added in newer protocol minors |
 

@@ -117,6 +117,24 @@ async def test_describe_and_tools(pair):
     assert "You are Mia, in the Kitchen" in await call_tool(mia, "move", {"to": "north"})
 
 
+async def test_map_and_go_to(pair):
+    mia, otto = pair
+    assert await mia.move(to="north")
+    result = await mia.map(to="Study")
+    assert [s["to"] for s in result.data["route"]] == ["hall", "study"]
+    text = await call_tool(mia, "map", {"to": "study"})
+    assert "Kitchen (you are here): south to Hall" in text
+    assert "Way to Study, 2 steps: south (Hall) -> east (Study)." in text
+    passed = []
+    otto.on("entered_room")(lambda ev, agent: passed.append(ev["entity"]))
+    out = await call_tool(mia, "go_to", {"place": "study", "near": "lamp"})
+    assert "You are Mia, in the Study" in out and "(near the lamp)" in out
+    await eventually(lambda: "mia" in passed)  # otto, in the hall, saw her walk through
+    assert (await mia.go_to("study")).data["already_there"]
+    failed = await mia.go_to("the moon")
+    assert not failed.ok and failed.reason == "no_such_place"
+
+
 async def test_on_ready_can_await_intents(server):
     agent = Agent(server, "tok-mia")
     results = []

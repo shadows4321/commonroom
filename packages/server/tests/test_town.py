@@ -65,6 +65,23 @@ def test_walk_from_home_to_a_neighbour():
     assert w.objects["otto.kettle"].state["filled"] and not w.objects["mia.kettle"].state["filled"]
 
 
+def test_map_finds_houses_by_owner_and_home():
+    w = World(load_world(TOWN))
+    w.connect(AgentSpec("mia", "Mia", "t"))
+    w.connect(AgentSpec("otto", "Otto", "t2"))
+    m = w.handle("mia", {"type": "map"})["map"]
+    assert m["home"] == "mia.garden"
+    assert {a["id"]: a["entrance"] for a in m["areas"]} == {"town": None, "mia": "mia.garden", "otto": "otto.garden"}
+    for place in ("Otto", "otto", "Otto's house", "Otto's Garden"):
+        result = w.handle("mia", {"type": "map", "to": place})
+        assert result["destination"]["id"] == "otto.garden", place
+        assert [s["to"] for s in result["route"]] == ["street_west", "otto.garden"]
+    for step in w.handle("mia", {"type": "map", "to": "Otto's Kitchen"})["route"]:
+        w.handle("mia", {"type": "move", "to": step["to"]})
+    assert w.entities["mia"].room == "otto.kitchen"
+    assert [s["to"] for s in w.handle("mia", {"type": "map", "to": "home"})["route"]][-1] == "mia.garden"
+
+
 def test_house_validation(town_dir):
     house = yaml.safe_load((town_dir / "houses" / "mia.yaml").read_text())
     house["rooms"]["kitchen"]["exits"]["back"] = "@street"

@@ -15,7 +15,8 @@ README and `docs/` cover usage; this file covers how the code fits together.
 ```bash
 make install      # .venv + editable installs of protocol, server[dev], sdk-python[dev]
 make test         # pytest in each of packages/protocol, packages/server, packages/sdk-python
-make run          # server for worlds/town on :8765 (needs worlds/town/agents.yaml: copy agents.example.yaml)
+make run          # server for worlds/town on 127.0.0.1:8765; override WORLD, DB, HOST, PORT
+                  # (needs <world>/agents.yaml: copy agents.example.yaml)
 make blockout     # regenerate worlds/town/*.glb from tools/make_blockout.py and re-import them
 
 # one file / one test (run from the package directory; pytest config lives in each pyproject)
@@ -91,7 +92,8 @@ resolve via ack futures in the reader loop, while handlers and `on_ready`
 run sequentially on a separate dispatch task, so handlers may `await`
 intents. `say(polite=True)` compares against what the model was last
 shown (`describe()` / `mark_heard()`), not the newest speech received.
-`tools.py` has the LLM tool schemas (Anthropic and OpenAI shapes) and
+`go_to(place)` asks for a `map` route and walks it one `move` at a time,
+so everyone on the way sees the AI pass. `tools.py` has the LLM tool schemas (Anthropic and OpenAI shapes) and
 `call_tool`. `examples/companion.py` is the shared LLM companion loop;
 `claude_companion.py` and `openai_companion.py` only implement `think()`.
 

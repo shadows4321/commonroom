@@ -49,6 +49,10 @@
       </section>
       <ol id="chat" class="chat" aria-live="polite"></ol>
     </aside>
+    <div id="minimap" class="minimap" hidden>
+      <button type="button" class="minimap-toggle" aria-expanded="true" aria-controls="minimap-body">Map</button>
+      <div id="minimap-body" class="minimap-body"><canvas aria-label="Town map: click a dot to follow someone, or a place to look there"></canvas></div>
+    </div>
     <div id="notice" class="notice" hidden></div>
   </main>
   <script type="module" src="/viewer/town3d.js"></script>

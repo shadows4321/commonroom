@@ -25,6 +25,24 @@ TOOLS: list[dict[str, Any]] = [
         }},
     },
     {
+        "name": "map",
+        "description": "See the map of the whole world: the town, every house and how the rooms connect. "
+                       "Give a destination to also get the way there from where you are.",
+        "input_schema": {"type": "object", "properties": {
+            "to": {**_STR, "description": "Optional destination: a room, a house, a person's name (their "
+                                           "house), or 'home'."},
+        }},
+    },
+    {
+        "name": "go_to",
+        "description": "Walk to any room in the world, however far, through the rooms in between. Use a room "
+                       "name, a house, a person's name (to go to their house) or 'home'.",
+        "input_schema": {"type": "object", "properties": {
+            "place": {**_STR, "description": "Where to go."},
+            "near": {**_STR, "description": "Optional person or object to stand next to when you arrive."},
+        }, "required": ["place"]},
+    },
+    {
         "name": "say",
         "description": "Say something out loud to everyone in your room.",
         "input_schema": {"type": "object", "properties": {"text": _STR}, "required": ["text"]},
@@ -136,8 +154,11 @@ def describe_result(agent: Agent, name: str, result: Result) -> str:
             holding = ", ".join(h["name"] for h in e["holding"]) or "nothing"
             return f"{e['name']}: {e['description'] or 'no description'}. Holding: {holding}."
         return agent.describe()
-    if name == "move":
+    if name == "move" or name == "go_to":
         return agent.describe()
+    if name == "map":
+        from .view import format_map
+        return format_map(data)
     if name == "interact":
         return data.get("message", "Done.") + (f"\n{data['reveal']}" if data.get("reveal") else "")
     return "Done."

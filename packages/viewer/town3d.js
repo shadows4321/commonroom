@@ -172,6 +172,7 @@ const model = {
   floors: new Map(), // room id -> [mesh]
   exits: new Map(), // room id -> Map(label -> Object3D)
   objects: new Map(), // object id -> { node, room, parent, position, quaternion }
+  objectNodes: new Map(), // obj:<id> node -> object id (for clicking things)
   spots: new Map(), // object id -> Object3D
   seats: new Map(), // object id -> [Object3D], in name order (seat:sofa, seat:sofa.001, ...)
   spawns: new Map(), // room id -> [Object3D]
@@ -232,6 +233,7 @@ function indexModel(root, areaId, prefix) {
         break;
       case "obj": {
         const room = ancestorArg(node, "room");
+        model.objectNodes.set(node, prefix + args[0]);
         model.objects.set(prefix + args[0], {
           node, room: room && roomId(room), parent: node.parent,
           position: node.position.clone(), quaternion: node.quaternion.clone(),
@@ -862,7 +864,7 @@ const minimap = createMinimap({
 });
 
 function updateCutaway() {
-  const inside = new Set();
+  const inside = new Set(lookingInside);
   const e = following && state.entities.get(following);
   if (e) {
     inside.add(e.room);
@@ -870,6 +872,242 @@ function updateCutaway() {
   }
   for (const [key, nodes] of model.hideInside) for (const n of nodes) n.visible = !inside.has(key);
 }
+
+// -------------------------------------------------------------- inspecting
+// Click an object for what it is and what it's doing, a house for who lives there and who's
+// in which room (and to look inside), a room for who and what is in it, or a person to follow.
+
+let inspected = null; // { kind: "object" | "house" | "room", id, room? }
+const lookingInside = new Set(); // area or room ids whose roofs are lifted from the info card
+let selection = null; // a box around what's inspected
+const pickRay = new THREE.Raycaster();
+
+const visibleChain = (o) => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+
+function houseOf(node) {
+  for (let n = node; n; n = n.parent) for (const [owner, holder] of model.houseRoots) if (n === holder) return owner;
+  return null;
+}
+
+/** What is under the pointer: the nearest visible, solid thing that means something. */
+function pick(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  pickRay.setFromCamera(ndc, camera);
+  const people = new Map([...characters].map(([id, ch]) => [ch.group, id]));
+  const floorRoom = new Map();
+  for (const [room, meshes] of model.floors) for (const m of meshes) floorRoom.set(m, room);
+  for (const hit of pickRay.intersectObjects(scene.children, true)) {
+    const o = hit.object;
+    if (!o.isMesh && !o.isSprite) continue;
+    if (!visibleChain(o) || (o.material?.transparent && o.material.opacity < 0.5)) continue; // faded walls
+    for (let n = o; n; n = n.parent) {
+      if (model.objectNodes.has(n)) return { kind: "object", id: model.objectNodes.get(n) };
+      if (people.has(n)) return { kind: "person", id: people.get(n) };
+    }
+    const owner = houseOf(o);
+    const local = ancestorArg(o, "room");
+    const room = floorRoom.get(o) || (local && (owner ? `${owner}.${local}` : local));
+    if (owner && state.areas.has(owner)) return { kind: "house", id: owner, room: state.rooms.has(room) ? room : null };
+    if (room && state.rooms.has(room)) return { kind: "room", id: room };
+    return null; // the ground, a street lamp's pole, scenery
+  }
+  return null;
+}
+
+function inspect(target) {
+  // Clicking something inside keeps the roof off; picking another house or room puts it back.
+  if (target.kind !== "object" && inspected && (inspected.kind !== target.kind || inspected.id !== target.id)) {
+    lookingInside.clear();
+  }
+  inspected = target;
+  updateCutaway();
+  renderInspect();
+}
+
+function closeInspect() {
+  inspected = null;
+  lookingInside.clear();
+  updateCutaway();
+  renderInspect();
+}
+
+function inspectedNode() {
+  if (!inspected) return null;
+  if (inspected.kind === "object") return model.objects.get(inspected.id)?.node || null;
+  if (inspected.kind === "house") return model.houseRoots.get(inspected.id) || null;
+  const meshes = model.floors.get(inspected.id);
+  return meshes && meshes[0];
+}
+
+/** Lift the roof off a house or roofed room, and look down into it. */
+function toggleInside(key) {
+  if (lookingInside.has(key)) lookingInside.delete(key);
+  else {
+    lookingInside.add(key);
+    following = null;
+    const box = new THREE.Box3();
+    if (inspected.kind === "house") box.setFromObject(model.houseRoots.get(key));
+    else for (const m of model.floors.get(key) || []) box.expandByObject(m);
+    if (!box.isEmpty()) {
+      const centre = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const dist = Math.max(size.x, size.z) * 0.9 + 4;
+      controls.target.set(centre.x, box.min.y, centre.z);
+      camera.position.set(centre.x, box.min.y + dist, centre.z + dist * 0.55);
+    }
+    renderPeople();
+  }
+  updateCutaway();
+  renderInspect();
+}
+
+const words = (verb) => verb.replace(/_/g, " ");
+const nameOfEntity = (id) => state.entities.get(id)?.name || id;
+
+function whereIs(o) {
+  const loc = o.location;
+  if (loc.kind === "room") return state.rooms.get(loc.id)?.name || loc.id;
+  if (loc.kind === "entity") return `Held by ${nameOfEntity(loc.id)}`;
+  if (loc.kind === "container") return `In the ${state.objects.get(loc.id)?.name || loc.id}`;
+  return "";
+}
+
+function peopleIn(roomId) {
+  return [...state.entities.values()].filter((e) => e.room === roomId).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function personLine(e) {
+  const bits = [e.name];
+  if (e.pose) bits.push(`${e.pose.kind === "lying" ? "lying on" : "sitting on"} the ${e.pose.name}`);
+  else if (e.near) bits.push(`by ${e.near.kind === "entity" ? "" : "the "}${e.near.name}`);
+  if (!e.online) bits.push("dozing");
+  return bits.join(", ");
+}
+
+function list(items, empty) {
+  if (!items.length) return el("p", "inspect-muted", empty);
+  const ul = el("ul", "inspect-list");
+  for (const item of items) ul.append(typeof item === "string" ? el("li", null, item) : item);
+  return ul;
+}
+
+function section(title, ...children) {
+  const box = el("div", "inspect-section");
+  box.append(el("h3", null, title), ...children);
+  return box;
+}
+
+function renderInspect() {
+  const card = $("inspect");
+  if (selection) { scene.remove(selection); selection.dispose(); selection = null; }
+  if (!inspected) { card.hidden = true; card.replaceChildren(); return; }
+  let title = "";
+  let sub = "";
+  const body = [];
+  if (inspected.kind === "object") {
+    const o = state.objects.get(inspected.id);
+    if (!o) { inspected = null; card.hidden = true; return; }
+    title = o.name;
+    sub = whereIs(o);
+    if (o.description) body.push(el("p", null, o.description));
+    const flags = Object.entries(o.state || {}).map(([k, v]) => (typeof v === "boolean" ? (v ? words(k) : `not ${words(k)}`) : `${words(k)}: ${v}`));
+    if (flags.length) body.push(section("State", el("p", null, flags.join(" · "))));
+    const verbs = (o.verbs || []).map((v) => words(v.verb) + (v.needs ? ` (needs ${words(v.needs)})` : ""));
+    body.push(section("Can be used to", el("p", verbs.length ? null : "inspect-muted",
+      verbs.length ? verbs.join(" · ") : "Nothing to do with it right now.")));
+    const on = [...state.entities.values()].filter((e) => e.pose && e.pose.object === o.id);
+    if (on.length) body.push(section("On it", list(on.map(personLine), "")));
+    if (o.container) {
+      const inside = [...state.objects.values()].filter((c) => c.location.kind === "container" && c.location.id === o.id);
+      body.push(section("Inside", o.container.open ? list(inside.map((c) => c.name), "Empty.") : el("p", "inspect-muted", "Closed.")));
+    }
+    if (o.portable) body.push(el("p", "inspect-muted", "Can be picked up."));
+  } else if (inspected.kind === "house") {
+    const area = state.areas.get(inspected.id);
+    if (!area) { inspected = null; card.hidden = true; return; }
+    const owner = state.entities.get(area.owner);
+    title = area.name;
+    sub = owner ? `${owner.name} is ${owner.online ? "awake" : "dozing"}, in ${state.rooms.get(owner.room)?.name || owner.room}` : `Plot ${area.plot}`;
+    const rooms = [...state.rooms.values()].filter((r) => r.area === area.id);
+    const items = rooms.map((r) => {
+      const li = el("li", r.id === inspected.room ? "here" : null);
+      li.append(el("span", "inspect-room", r.name.replace(`${owner?.name || ""}'s `, "")));
+      const people = peopleIn(r.id);
+      li.append(el("span", "inspect-muted", people.length ? ` ${people.map(personLine).join("; ")}` : " empty"));
+      li.title = r.description || "";
+      li.onclick = () => inspect({ kind: "house", id: area.id, room: r.id });
+      return li;
+    });
+    body.push(section("Rooms", list(items, "No rooms.")));
+    if (inspected.room) {
+      const r = state.rooms.get(inspected.room);
+      if (r?.description) body.push(section(r.name, el("p", null, r.description)));
+      const things = [...state.objects.values()].filter((o) => o.location.kind === "room" && o.location.id === inspected.room);
+      if (things.length) body.push(el("p", "inspect-muted", `Things here: ${things.map((o) => o.name).join(", ")}`));
+    }
+    if (model.hideInside.has(area.id)) {
+      const button = el("button", "link-button inspect-action", lookingInside.has(area.id) ? "Put the roof back" : "Look inside");
+      button.type = "button";
+      button.onclick = () => toggleInside(area.id);
+      body.push(button);
+    }
+  } else {
+    const r = state.rooms.get(inspected.id);
+    if (!r) { inspected = null; card.hidden = true; return; }
+    title = r.name;
+    sub = r.area && r.area !== "town" ? state.areas.get(r.area)?.name || "" : "";
+    if (r.description) body.push(el("p", null, r.description));
+    body.push(section("People", list(peopleIn(r.id).map(personLine), "Nobody's here.")));
+    const things = [...state.objects.values()].filter((o) => o.location.kind === "room" && o.location.id === r.id);
+    body.push(section("Things", list(things.map((o) => {
+      const li = el("li", "clickable", o.name);
+      li.onclick = () => inspect({ kind: "object", id: o.id });
+      return li;
+    }), "Nothing here.")));
+    body.push(section("Ways out", list(r.exits.map((x) => `${x.direction} → ${x.to_name}`), "None.")));
+    if (model.hideInside.has(r.id)) {
+      const button = el("button", "link-button inspect-action", lookingInside.has(r.id) ? "Put the roof back" : "Look inside");
+      button.type = "button";
+      button.onclick = () => toggleInside(r.id);
+      body.push(button);
+    }
+  }
+  const head = el("div", "hud-head");
+  const titles = el("div", "inspect-titles");
+  titles.append(el("h2", null, title));
+  if (sub) titles.append(el("p", "inspect-muted", sub));
+  const close = el("button", "link-button", "Close");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close");
+  close.onclick = closeInspect;
+  head.append(titles, close);
+  card.replaceChildren(head, ...body);
+  card.hidden = false;
+  const node = inspectedNode();
+  if (node) {
+    selection = new THREE.BoxHelper(node, 0xffd25a);
+    selection.material.depthTest = false;
+    selection.material.transparent = true;
+    selection.renderOrder = 999;
+    scene.add(selection);
+  }
+}
+
+// A click (not a drag of the camera) inspects what's under the pointer.
+let pressed = null;
+labelRenderer.domElement.addEventListener("pointerdown", (e) => { pressed = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+labelRenderer.domElement.addEventListener("pointerup", (e) => {
+  const p = pressed;
+  pressed = null;
+  if (!p || !model.loaded || e.button !== 0) return;
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6 || performance.now() - p.t > 600) return;
+  const target = pick(e.clientX, e.clientY);
+  if (!target) closeInspect();
+  else if (target.kind === "person") follow(target.id);
+  else inspect(target);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && inspected) closeInspect(); });
 
 const wallRay = new THREE.Raycaster();
 let fadedWalls = new Set();
@@ -985,6 +1223,7 @@ function applyUpdate(data) {
     }
   }
   if (data.entities.length) { renderPeople(); updateCutaway(); }
+  if (inspected && (data.entities.length || data.objects.length)) renderInspect();
 }
 
 // ------------------------------------------------------------------- loop
@@ -1019,6 +1258,7 @@ connect();
 
 // For automated checks (and curious people in the console).
 window.commonroom3d = {
-  state, model, characters, scene, camera, controls, follow, lookAt, minimap, applyTime, fadeWalls,
+  state, model, characters, scene, camera, controls, follow, lookAt, minimap, applyTime, fadeWalls, pick, inspect,
+  get inspected() { return inspected; }, lookingInside,
   get following() { return following; },
 };

@@ -41,6 +41,11 @@ Served at `/3d`. It renders the same stream with three.js:
 - **Following someone** hides `ext:`/`ceiling:` of the building they're
   in and fades `wall:` meshes between the camera and them.
 
+- **Clicking things:** an object shows what it is, its state, what can be
+  done with it, who's on it and what's inside; a house shows whose it is
+  and who's in which room, with **Look inside** to lift the roof off; a room
+  (or the café) shows who and what is there and the ways out; a person is
+  followed. Click empty ground or press Esc to close the card.
 - **Map** (`minimap.js`, bottom left): the floors from above, everyone as a dot
   and a wedge for the camera. Click a dot to follow that person, or a place to
   look there. It can be folded away (remembered on the device).

@@ -60,6 +60,22 @@ body.three-d main.stage { flex: 1; position: relative; display: block; min-heigh
   padding: 3px 6px; border-radius: 6px; pointer-events: none;
 }
 
+/* The info card for whatever was clicked. */
+.inspect[hidden] { display: none; }
+.inspect { font-size: 13px; max-height: 45vh; overflow-y: auto; }
+.inspect .hud-head { align-items: flex-start; gap: 8px; }
+.inspect h2 { margin: 0; font-size: 15px; }
+.inspect h3 { margin: 8px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.inspect p { margin: 4px 0; }
+.inspect-muted { color: var(--muted); }
+.inspect-list { list-style: none; margin: 2px 0; padding: 0; }
+.inspect-list li { padding: 2px 0; }
+.inspect-list li[title], .inspect-list li.clickable { cursor: pointer; }
+.inspect-list li.here .inspect-room { font-weight: 700; }
+.inspect-list li.clickable:hover, .inspect-list li[title]:hover { color: var(--accent); }
+.inspect-room { font-weight: 600; }
+.inspect-action { display: block; margin-top: 8px; padding: 0; font-size: 13px; color: var(--accent); }
+
 /* The map (minimap.js), bottom left. */
 .minimap {
   position: absolute; left: 12px; bottom: 12px; width: 240px;

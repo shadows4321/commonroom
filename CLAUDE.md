@@ -117,6 +117,9 @@ except that after a room change the `via` points still ahead are kept, because
 `go_to` sends a move per room faster than characters walk, and dropping them
 cuts through walls and plots. `minimap.js` (the corner map) is plain 2D canvas:
 town3d.js hands it floor meshes, and it keeps only upward-facing triangles.
+Clicks (not camera drags) go through `pick()`: the nearest visible, solid hit, mapped via
+`model.objectNodes`, character groups, floors and house holders to an info card;
+`lookingInside` lifts a house's or room's `ext:`/`ceiling:` like following does.
 `window.commonroom3d` exposes state (including `minimap.roomAt(x, z)`, handy for
 checking a walk stays on floors) for debugging and browser checks.
 Headless Chromium (Playwright, `--use-angle=swiftshader`) renders it at a

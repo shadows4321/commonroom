@@ -356,6 +356,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         async def index():
             return FileResponse(viewer_dir / "index.html")
 
+        @app.get("/3d")
+        async def index_3d():
+            return FileResponse(viewer_dir / "3d.html")
+
         app.mount("/viewer", StaticFiles(directory=viewer_dir), name="viewer")
 
     return app

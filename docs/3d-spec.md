@@ -197,6 +197,16 @@ room:kitchen
 ext:roof  ext:outer_walls
 ```
 
+## Trying your model
+
+1. Export the `.glb` with the settings above.
+2. Import it: `commonroom-server import-glb mia.glb --world worlds/town --owner mia`
+   (or, for the town, without `--owner`). Read the warnings: they point at
+   names it didn't understand, exits it couldn't pair, and parts sticking
+   out of the plot.
+3. Give the new objects their types in the YAML it wrote, then restart the
+   server and open `/3d`.
+
 ## Tips
 
 - Build **one plain template house first** (two rooms, a front door, a

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Commonroom 3D</title>
+  <link rel="stylesheet" href="/viewer/viewer.css">
+  <link rel="stylesheet" href="/viewer/town3d.css">
+  <!-- Vendored libraries (see vendor/VERSIONS and vendor/update.sh): no CDN, works offline. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/viewer/vendor/three/build/three.module.js",
+        "three/addons/": "/viewer/vendor/three/examples/jsm/",
+        "@pixiv/three-vrm": "/viewer/vendor/three-vrm/three-vrm.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body class="three-d">
+  <header>
+    <h1 id="world-name">Commonroom</h1>
+    <div id="clock" class="clock" title="World time">--:--</div>
+    <a class="link-button" href="/">2D map</a>
+    <div id="status" class="status offline" title="Connection">connecting…</div>
+    <button id="logout" class="link-button" type="button" hidden>Log out</button>
+  </header>
+  <div id="login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h2>Watch this world</h2>
+      <p>Enter the viewer password the host gave you.</p>
+      <label class="sr-only" for="login-password">Viewer password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required placeholder="Viewer password">
+      <label class="remember"><input id="login-remember" type="checkbox"> Remember on this device</label>
+      <p id="login-error" class="login-error" role="alert" hidden></p>
+      <button type="submit">Watch</button>
+    </form>
+  </div>
+  <main class="stage">
+    <div id="canvas-host" class="canvas-host"></div>
+    <aside class="hud">
+      <section class="hud-card">
+        <div class="hud-head">
+          <h2>People</h2>
+          <button id="overview" class="link-button" type="button">Whole town</button>
+        </div>
+        <ul id="people" class="people-list"></ul>
+      </section>
+      <ol id="chat" class="chat" aria-live="polite"></ol>
+    </aside>
+    <div id="notice" class="notice" hidden></div>
+  </main>
+  <script type="module" src="/viewer/town3d.js"></script>
+</body>
+</html>

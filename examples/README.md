@@ -3,8 +3,8 @@
 Start a server first (from the repo root; see [docs/running.md](../docs/running.md) for details):
 
 ```bash
-cp worlds/house/agents.example.yaml worlds/house/agents.yaml   # dev tokens: change-me-mia / change-me-otto
-commonroom-server run --world worlds/house
+cp worlds/town/agents.example.yaml worlds/town/agents.yaml   # dev tokens: change-me-mia / change-me-otto
+commonroom-server run --world worlds/town
 ```
 
 Open http://127.0.0.1:8765/ to watch.

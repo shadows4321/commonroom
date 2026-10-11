@@ -73,9 +73,12 @@ h2 { font-size: 14px; margin: 0; }
 
 main { flex: 1; display: grid; grid-template-columns: 1fr minmax(280px, 380px); min-height: 0; }
 .map {
-  padding: 16px; overflow: auto; display: grid; gap: 14px; align-content: start;
+  padding: 16px; overflow: auto; display: grid; gap: 22px; align-content: start;
   background: linear-gradient(var(--tint), var(--tint));
 }
+.area-grid { display: grid; gap: 14px; align-content: start; }
+.area { display: flex; flex-direction: column; gap: 8px; }
+.area-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .room {
   background: var(--room); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
   min-height: 120px; cursor: pointer; transition: background .15s, border-color .15s;
@@ -117,7 +120,9 @@ select { background: var(--bg); color: var(--ink); border: 1px solid var(--line)
 
 @media (max-width: 760px) {
   main { grid-template-columns: 1fr; grid-template-rows: auto 45vh; }
-  .map { grid-template-columns: 1fr !important; padding: 12px 16px; }
+  .map { padding: 12px 16px; }
+  .area-grid { grid-template-columns: 1fr !important; }
   .room { grid-column: auto !important; grid-row: auto !important; }
   .log-panel { border-left: 0; border-top: 1px solid var(--line); }
 }
+a.link-button { text-decoration: none; }

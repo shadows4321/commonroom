@@ -31,6 +31,16 @@ async def test_connects_and_negotiates(pair):
     assert mia.me == "mia"
     assert mia.protocol == PROTOCOL_VERSION
     assert mia.view.room["id"] == "hall"
+    assert mia.connected
+
+
+async def test_connected_follows_the_connection(server):
+    agent = Agent(server, "tok-mia", reconnect=False)
+    assert not agent.connected
+    await agent.start()
+    assert agent.connected
+    await agent.close()
+    assert not agent.connected
 
 
 async def test_bad_token_is_fatal(server):
@@ -63,6 +73,16 @@ async def test_polite_say_reports_what_was_missed(pair):
     assert not result and result.reason == "conversation_moved_on"
     assert result.details["missed"][0]["text"] == "me first"
     assert await mia.say("oh, hi otto", polite=True)  # the missed line now counts as heard
+
+
+async def test_describe_without_hearing_keeps_say_polite(pair):
+    mia, otto = pair
+    mia.describe()  # the town model reads the room...
+    assert await otto.say("me first")
+    await eventually(lambda: mia.view.last_speech_seq == 1)
+    assert "me first" in mia.describe(hear=False)  # ...a chat channel is shown it too...
+    result = await mia.say("hello", polite=True)  # ...but the town model still hasn't heard it
+    assert not result and result.reason == "conversation_moved_on"
 
 
 async def test_after_seq_answers_a_specific_line(pair):
@@ -173,6 +193,16 @@ def test_openai_tool_schemas_mirror_anthropic_ones():
     for a, o in zip(anthropic_tools, openai_tools):
         assert o["type"] == "function"
         assert o["function"] == {"name": a["name"], "description": a["description"], "parameters": a["input_schema"]}
+
+
+async def test_tool_prefix(pair):
+    mia, _ = pair
+    names = {t["name"] for t in tool_schemas()}
+    assert {t["name"] for t in tool_schemas("town_")} == {"town_" + n for n in names}
+    assert {t["function"]["name"] for t in openai_tool_schemas("town_")} == {"town_" + n for n in names}
+    assert "You are Mia" in await call_tool(mia, "town_look", {}, prefix="town_")
+    assert "unknown_tool" in await call_tool(mia, "look", {}, prefix="town_")  # the bare name isn't a tool
+    assert "'town_dance'" in await call_tool(mia, "town_dance", {}, prefix="town_")
 
 
 async def test_call_tool_is_polite_and_reports_bad_calls(pair):

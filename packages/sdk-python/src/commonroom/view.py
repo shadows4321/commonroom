@@ -137,15 +137,18 @@ class Perception:
         seq = self.last_speech_seq if seq is None else seq
         self.heard_seq = seq if self.heard_seq is None else max(self.heard_seq, seq)
 
-    def describe(self, history: int = 15) -> str:
+    def describe(self, history: int = 15, *, hear: bool = True) -> str:
         """A plain-text description of the surroundings, ready to drop into an LLM prompt.
 
         Also marks the room's speech as heard, so a later `say(polite=True)` is
         rejected if anyone speaks between building this prompt and answering it.
+        Pass hear=False when the text is for someone other than the model that
+        acts in the world (a chat channel, a log), so that check isn't weakened.
         """
         if not self.room:
             return "You are not connected to the world yet."
-        self.mark_heard()
+        if hear:
+            self.mark_heard()
         lines = []
         if self.clock:
             lines.append(f"It is {self.clock['label']}.")

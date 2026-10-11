@@ -97,27 +97,33 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def tool_schemas() -> list[dict[str, Any]]:
-    """Tools in the Anthropic shape: {name, description, input_schema}."""
-    return [dict(t) for t in TOOLS]
+def tool_schemas(prefix: str = "") -> list[dict[str, Any]]:
+    """Tools in the Anthropic shape: {name, description, input_schema}.
+
+    `prefix` is put in front of every name (e.g. "town_" gives "town_say"), so the
+    tools don't clash with a bot's own; pass the same prefix to `call_tool`.
+    """
+    return [{**t, "name": prefix + t["name"]} for t in TOOLS]
 
 
-def openai_tool_schemas() -> list[dict[str, Any]]:
+def openai_tool_schemas(prefix: str = "") -> list[dict[str, Any]]:
     """Tools in the OpenAI Chat Completions shape: {type: function, function: {name, description, parameters}}."""
     return [{"type": "function",
-             "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
+             "function": {"name": prefix + t["name"], "description": t["description"], "parameters": t["input_schema"]}}
             for t in TOOLS]
 
 
-async def call_tool(agent: Agent, name: str, args: dict[str, Any], *, polite: bool = True) -> str:
+async def call_tool(agent: Agent, name: str, args: dict[str, Any], *, polite: bool = True, prefix: str = "") -> str:
     """Run a tool call against the world and return a short text result for the model.
 
     With polite=True (the default), `say` refuses to talk over someone who spoke
     while the model was thinking: the result lists what was missed so the model
-    can respond to it instead.
+    can respond to it instead. With a `prefix`, only names carrying it are tools.
     """
+    called = name
+    name = name[len(prefix):] if name.startswith(prefix) else ""
     if name not in {t["name"] for t in TOOLS}:
-        return f"That didn't work (unknown_tool): there is no tool called {name!r}."
+        return f"That didn't work (unknown_tool): there is no tool called {called!r}."
     if not isinstance(args, dict):
         return f"That didn't work (bad_request): arguments for {name} must be an object."
     try:

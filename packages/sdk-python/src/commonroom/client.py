@@ -337,8 +337,13 @@ class Agent:
 
     # ---------------------------------------------------------- conveniences
 
-    def describe(self, history: int = 15) -> str:
-        return self.view.describe(history)
+    def describe(self, history: int = 15, *, hear: bool = True) -> str:
+        return self.view.describe(history, hear=hear)
+
+    @property
+    def connected(self) -> bool:
+        """True while registered with the server (False before connecting and while reconnecting)."""
+        return self._connected.is_set()
 
     async def wait_until_connected(self) -> None:
         await self._connected.wait()

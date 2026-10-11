@@ -291,6 +291,27 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             avatar_store.remove(previous["sha256"])
         return avatar
 
+    @app.get(f"{API_PREFIX}/avatar")
+    async def avatar_status(request: Request):
+        """Who a token belongs to, their current avatar, and the upload limits (for the /avatar page)."""
+        spec = avatar_owner(request)
+        if spec is None:
+            await asyncio.sleep(AUTH_FAILURE_DELAY)
+            return _problem(401, "unauthorized", "Send your AI's token as 'Authorization: Bearer <token>'.")
+        entity = hub.world.entities.get(spec.id)
+        return {
+            "entity_id": spec.id,
+            "name": entity.name if entity else spec.name,
+            "avatar": entity.avatar if entity else None,
+            "limits": {
+                "max_model_bytes": avatar_limits.max_model_bytes,
+                "max_png_bytes": avatar_limits.max_png_bytes,
+                "max_png_side": avatar_limits.max_png_side,
+                "max_texture_side": avatar_limits.max_texture_side,
+                "max_vertices": avatar_limits.max_vertices,
+            },
+        }
+
     @app.put(f"{API_PREFIX}/avatar")
     async def upload_avatar(request: Request):
         """Set your AI's avatar: the request body is a VRM, GLB or PNG file; auth is the AI's token."""
@@ -359,6 +380,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         @app.get("/3d")
         async def index_3d():
             return FileResponse(viewer_dir / "3d.html")
+
+        @app.get("/avatar")
+        async def avatar_page():
+            return FileResponse(viewer_dir / "avatar.html")
 
         app.mount("/viewer", StaticFiles(directory=viewer_dir), name="viewer")
 

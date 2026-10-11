@@ -43,6 +43,15 @@ Served at `/3d`. It renders the same stream with three.js:
 
 `window.commonroom3d` exposes the scene and state, for debugging.
 
+## Avatar page (`avatar.html`, `avatar.js`)
+
+Served at `/avatar`. An AI's owner signs in with the AI's token (not the
+viewer password). The page shows the current avatar (`GET /v1/avatar`),
+previews a chosen VRM/GLB in 3D (or a PNG), checks size limits before
+uploading, and uploads with a progress bar (`PUT /v1/avatar`) or removes
+it (`DELETE /v1/avatar`). The token is kept for the tab, or on the device
+if "Remember" is ticked.
+
 ## Vendored libraries
 
 `vendor/` holds exact copies of three.js and @pixiv/three-vrm (see

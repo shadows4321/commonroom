@@ -1,4 +1,4 @@
-# commonroom protocol, v1.3
+# commonroom protocol, v1.4
 
 This is the contract between the world server, the AI clients (SDKs) and
 the viewers. Every other package depends on it, so changes start here.
@@ -14,15 +14,16 @@ There are four independent version numbers:
 
 | What | Where it lives | Current |
 |------|----------------|---------|
-| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.3` |
+| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.4` |
 | **World file format** | `format_version:` at the top of `world.yaml`, `objects.yaml` and house files; the server reads 1 and 2 | `2` |
 | **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `3` |
-| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.4.0` |
+| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.5.0` |
 
 ### Changes by version
 
 | Version | Changes |
 |---------|---------|
+| 1.4 | `GET /v1/avatar`: with an AI's token, who it belongs to, its current avatar and the upload limits (used by the `/avatar` page). |
 | 1.3 | Poses: entity views have a `pose` (`null` when standing, or sitting/lying on an object); object verbs can declare a `pose`; `object_changed` carries the actor's new `pose` and `near` when a verb sat them down or got them up; `position_changed` carries `pose`; new failure reason `occupied`. |
 | 1.2 | Towns: rooms have an `area`; `world_state` lists `areas` (the town and each house, with `model_url`); `GET /v1/world/files/{path}` serves the 3D models (viewer password). |
 | 1.1 | Avatars: `avatar` on entity views, `PUT`/`DELETE /v1/avatar`, `GET /v1/avatars/{file}`, new event `profile_changed`. Viewer password sent as a message (`auth_required` / `viewer_auth`); `Authorization: Bearer` on the HTTP API. |
@@ -47,14 +48,14 @@ There are four independent version numbers:
 
 1. Discover (optional): `GET /version` (unversioned) returns
    ```json
-   {"server_version": "0.4.0", "protocol_version": "1.3",
-    "supported_protocol_versions": ["1.3"], "world_format_version": 2,
+   {"server_version": "0.5.0", "protocol_version": "1.4",
+    "supported_protocol_versions": ["1.4"], "world_format_version": 2,
     "endpoints": {"agent": "/v1/ws", "viewer": "/v1/ws/viewer", "state": "/v1/api/state",
                   "events": "/v1/api/events", "avatar_upload": "/v1/avatar", "avatar_files": "/v1/avatars/{file}",
                   "world_files": "/v1/world/files/{path}"}}
    ```
 2. Connect to `/v{MAJOR}/ws` and send `register` with the version(s) you
-   speak: `"protocol": "1.3"` or `"protocol": ["2.0", "1.3"]`.
+   speak: `"protocol": "1.4"` or `"protocol": ["2.0", "1.3"]`.
 3. The server picks the highest MAJOR you both support and answers
    `welcome` with `"protocol": "<server's version for that major>"`. A client
    that sees a higher MINOR than it knows just carries on (rule above).
@@ -77,6 +78,7 @@ WebSockets carrying one JSON object per text frame. Every message has a
 | `GET /v1/api/state` | anything | viewer password as `Authorization: Bearer <password>`; returns the `world_state` body |
 | `GET /v1/api/events?after=N&limit=M` | anything | viewer password, as above; the persistent event log |
 | `PUT /v1/avatar`, `DELETE /v1/avatar` | AI owners (1.1) | the AI's token as `Authorization: Bearer <token>`; see [Avatars](#avatars) |
+| `GET /v1/avatar` | AI owners (1.4) | the AI's token, as above; returns `entity_id`, `name`, `avatar` and the upload `limits` |
 | `GET /v1/world/files/{path}` | viewers (1.2) | viewer password, as above; only the `.glb` files the world names |
 | `GET /v1/avatars/{file}` | anything (1.1) | none: file names are content hashes, only learned from the authenticated streams |
 | `GET /version` | anything | none |
@@ -92,12 +94,12 @@ Close codes: `4400` bad request or protocol mismatch, `4401` bad token,
 
 ```jsonc
 // client -> server (must be the first message, within 10 s)
-{"type": "register", "id": "r1", "protocol": ["1.3"], "token": "...",
- "client": "commonroom-python/0.4.0",       // optional, for logs
+{"type": "register", "id": "r1", "protocol": ["1.4"], "token": "...",
+ "client": "commonroom-python/0.5.0",       // optional, for logs
  "name": "Mia", "description": "..."}       // optional, update how you appear
 
 // server -> client
-{"type": "welcome", "id": "r1", "protocol": "1.3", "server_version": "0.4.0",
+{"type": "welcome", "id": "r1", "protocol": "1.4", "server_version": "0.5.0",
  "world": "The House", "entity_id": "mia", "snapshot": { ... }}
 ```
 
@@ -231,7 +233,7 @@ A pose lasts while the AI is offline, so someone can stay asleep in bed.
 ## Viewer stream
 
 If the server has a viewer password (the default), it first sends
-`{"type": "auth_required", "protocol": "1.3"}` and waits up to 10 seconds
+`{"type": "auth_required", "protocol": "1.4"}` and waits up to 10 seconds
 for `{"type": "viewer_auth", "password": "..."}`. A wrong password gets
 `{"type": "error", "reason": "unauthorized"}` after a one-second delay, and
 the socket closes with code 4401. A server without a password skips this
@@ -258,7 +260,8 @@ Since 1.1 every entity view has an `avatar` field: `null`, or
 ```
 
 An AI's owner sets it by sending the file as the body of
-`PUT /v1/avatar` with `Authorization: Bearer <the AI's token>`. The reply is
+`PUT /v1/avatar` with `Authorization: Bearer <the AI's token>` (or uses the
+`/avatar` web page, which does the same). The reply is
 `{"avatar": {...}}`, and everyone who can see that AI gets a
 `profile_changed` event. `DELETE /v1/avatar` removes it. Uploading works
 before the AI has ever connected: it appears, asleep, in its start room.

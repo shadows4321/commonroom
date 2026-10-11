@@ -40,7 +40,7 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   both depend only on the protocol package, never on each other at runtime.
   The SDK's tests start a real in-process server, so they import the server
   (and its test fixtures in `packages/server/tests/`).
-- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`,
+- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`, `/avatar`,
   `/viewer/*`). No build step; three.js and three-vrm are **vendored** in
   `packages/viewer/vendor` (refresh with `vendor/update.sh`, no CDN).
 

@@ -115,3 +115,12 @@ def test_live_messages_match_schema(config, agents, tmp_path):
 def test_schema_rejects_malformed_intents(bad):
     with pytest.raises(AssertionError):
         validate(bad, "Intent")
+
+
+def test_avatar_status_matches_schema(config, agents, tmp_path):
+    app = create_app(config, agents, viewer_dir=None, clock_interval=0, avatars_dir=tmp_path)
+    with TestClient(app) as client:
+        auth = {"Authorization": "Bearer tok-mia"}
+        validate(client.get(f"{API_PREFIX}/avatar", headers=auth).json(), "AvatarStatus")
+        client.put(f"{API_PREFIX}/avatar", content=model(), headers=auth)
+        validate(client.get(f"{API_PREFIX}/avatar", headers=auth).json(), "AvatarStatus")

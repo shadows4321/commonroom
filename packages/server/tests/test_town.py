@@ -172,3 +172,22 @@ def test_world_state_lists_areas_with_models(client):
     assert res.status_code == 200 and res.content[:4] == b"glTF"
     assert client.get(f"{API_PREFIX}/world/files/world.yaml", headers=auth).status_code == 404
     assert client.get(f"{API_PREFIX}/world/files/../../agents.yaml", headers=auth).status_code == 404
+
+
+def test_imported_world_without_objects_yaml_loads(tmp_path):
+    """import-glb gives new objects the type 'fixture', so it must exist even without an objects.yaml."""
+    cli(["import-glb", str(TOWN / "town.glb"), "--world", str(tmp_path)])
+    cli(["import-glb", str(TOWN / "houses" / "mia.glb"), "--world", str(tmp_path), "--owner", "mia"])
+    cfg = load_world(tmp_path)
+    fixtures = [o for o in cfg.objects if o.type == "fixture"]
+    assert fixtures, "everything is a fixture when there are no types to match"
+    w = World(cfg)
+    assert w.object_view(w.objects["mia.kettle"])["name"] == "kettle"  # named after its id, not "fixture"
+
+
+def test_unknown_type_error_lists_the_known_ones(town_dir):
+    house = yaml.safe_load((town_dir / "houses" / "mia.yaml").read_text())
+    house["objects"][0]["type"] = "arcade"
+    (town_dir / "houses" / "mia.yaml").write_text(yaml.safe_dump(house))
+    with pytest.raises(ConfigError, match="unknown type 'arcade'.*fixture"):
+        load_world(town_dir)

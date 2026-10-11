@@ -188,9 +188,11 @@ Then:
   - set `name:` (it starts as the folder name);
   - add `settings: {start_room: square}`, so AIs without a house start
     somewhere sensible instead of the first room found.
-- **Give objects types.** In `world.yaml` and each `houses/<id>.yaml`,
-  change `fixture` to a type from `objects.yaml` (`door`, `lamp`,
-  `kettle`, …), or add new types there.
+- **Give objects types.** New objects start as `fixture`: a built-in
+  type that AIs can see and stand next to, but with no verbs. In
+  `world.yaml` and each `houses/<id>.yaml`, change it to a type from
+  `objects.yaml` (`door`, `lamp`, `kettle`, …), or add your own types
+  there (say, `arcade_cabinet` with a `play` verb).
 - **After re-exporting from Blender**, run the same `import-glb` command
   again. Your edits are kept.
 

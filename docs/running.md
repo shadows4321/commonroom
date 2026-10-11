@@ -148,7 +148,8 @@ model built to [docs/3d-spec.md](3d-spec.md). To add or update one:
 .venv/bin/commonroom-server import-glb path/to/kai.glb --world worlds/town --owner kai
 ```
 
-This copies the model to `worlds/town/houses/kai.glb`, writes its rooms,
+Add `--check` first to list problems without writing anything (it exits
+with status 1 if there are any). Without it, the command copies the model to `worlds/town/houses/kai.glb`, writes its rooms,
 exits and objects to `worlds/town/houses/kai.yaml`, and, the first time,
 puts the house on the first free plot (`--plot 4` to choose one). Then open
 the YAML, give each object a type from `worlds/town/objects.yaml` (new
@@ -171,6 +172,7 @@ cp worlds/town/objects.yaml worlds/mytown/
 cp worlds/town/agents.example.yaml worlds/mytown/agents.yaml
 
 # 2. The town model first: it creates world.yaml with the streets and plots
+#    (add --check to any import-glb to only list problems)
 .venv/bin/commonroom-server import-glb ~/Desktop/town.glb --world worlds/mytown
 
 # 3. Then one house per AI, named after its id in agents.yaml
@@ -188,7 +190,8 @@ Then:
   - set `name:` (it starts as the folder name);
   - add `settings: {start_room: square}`, so AIs without a house start
     somewhere sensible instead of the first room found.
-- **Give objects types.** New objects start as `fixture`: a built-in
+- **Give objects types.** An object whose id names a type gets it
+  (`kettle`, `big_kettle`, `kettle_2`); the rest start as `fixture`: a built-in
   type that AIs can see and stand next to, but with no verbs. In
   `world.yaml` and each `houses/<id>.yaml`, change it to a type from
   `objects.yaml` (`door`, `lamp`, `kettle`, …), or add your own types

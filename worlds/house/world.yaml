@@ -68,6 +68,7 @@ objects:
   - {id: piano, type: piano, room: living_room}
   - {id: reading_lamp, type: lamp, room: living_room, name: reading lamp}
   - {id: radio, type: radio, room: living_room}
+  - {id: sofa, type: sofa, room: living_room}
   - {id: chest, type: chest, room: library}
   - {id: old_letter, type: letter, in: chest, name: old letter}
   - {id: field_guide, type: book, room: library, name: field guide to birds,

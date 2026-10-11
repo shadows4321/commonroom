@@ -43,6 +43,7 @@ class Entity:
     near: str | None = None
     online: bool = False
     avatar: dict | None = None  # the entity view's "avatar" field (see avatars.AvatarInfo.view)
+    pose: dict | None = None  # {"kind": "sitting"|"lying", "object": id, "seat": n}; None = standing
 
 
 @dataclass
@@ -129,6 +130,12 @@ class World:
         for o in data["objects"]:
             if o.type in self.types:
                 self.objects[o.id] = o
+        for e in self.entities.values():
+            on = self.objects.get(e.pose["object"]) if e.pose else None
+            if e.pose and (on is None or on.loc_kind != "room" or on.loc_id != e.room
+                           or e.pose.get("seat", 0) >= self.obj_type(on).seats):
+                e.pose = None
+                self._pending.entities[e.id] = e
         # Objects whose location vanished (room removed from the YAML) go to the start room.
         for o in self.objects.values():
             if (o.loc_kind == "room" and o.loc_id not in self.rooms) or \
@@ -305,7 +312,19 @@ class World:
             "online": e.online,
             "holding": [{"id": o.id, "name": self.obj_name(o)} for o in self.held_by(e.id)],
             "avatar": e.avatar,
+            "pose": self._pose_view(e),
         }
+
+    def _pose_view(self, e: Entity) -> dict | None:
+        obj = self.objects.get(e.pose["object"]) if e.pose else None
+        if obj is None or obj.loc_kind != "room" or obj.loc_id != e.room:
+            return None
+        return {"kind": e.pose["kind"], "object": obj.id, "name": self.obj_name(obj), "seat": e.pose["seat"]}
+
+    def on_object(self, obj: Obj) -> list[Entity]:
+        """Who is sitting or lying on an object."""
+        return sorted((e for e in self.entities.values() if e.pose and e.pose["object"] == obj.id),
+                      key=lambda e: e.pose["seat"])
 
     def _near_view(self, e: Entity) -> dict | None:
         if e.near is None:
@@ -471,7 +490,7 @@ class World:
             arrival = next((d for d, r in self.rooms[dest].exits.items() if r == old), None)
             self._emit(LEFT_ROOM, old, {"entity": e.id, "entity_name": e.name, "to": dest,
                                         "to_name": self.rooms[dest].name, "via": via})
-            e.room, e.near = dest, near_id
+            e.room, e.near, e.pose = dest, near_id, None
             self._touch(e)
             self._emit(ENTERED_ROOM, dest, {"entity": e.id, "entity_name": e.name, "from": old,
                                             "from_name": self.rooms[old].name, "via": arrival,
@@ -479,10 +498,10 @@ class World:
             for held in self.held_by(e.id):
                 self._touch(held)
         elif near is not None:
-            e.near = near_id
+            e.near, e.pose = near_id, None
             self._touch(e)
             self._emit(POSITION_CHANGED, e.room, {"entity": e.id, "entity_name": e.name,
-                                                  "near": self._near_view(e)})
+                                                  "near": self._near_view(e), "pose": None})
         return {"room": e.room, "near": self._near_view(e), "snapshot": self.snapshot(e.id)}
 
     def _resolve_exit(self, here: str, to: str) -> tuple[str, str | None]:
@@ -578,6 +597,10 @@ class World:
             raise Failure(Reason.ALREADY_HELD, f"You are already holding the {name}.", object=obj.id)
         if not self.obj_type(obj).portable:
             raise Failure(Reason.NOT_PORTABLE, f"The {name} can't be picked up.", object=obj.id)
+        sitters = self.on_object(obj)
+        if sitters:
+            raise Failure(Reason.OCCUPIED, f"{_names(sitters)} {'is' if len(sitters) == 1 else 'are'} "
+                          f"on the {name}.", object=obj.id, entities=[x.id for x in sitters])
         if len(self.held_by(e.id)) >= self.settings.max_carry:
             raise Failure(Reason.HANDS_FULL, f"You can't carry more than {self.settings.max_carry} things.",
                           max_carry=self.settings.max_carry)
@@ -645,16 +668,43 @@ class World:
         tool = None
         if v.needs:
             tool = self._find_tool(e, v.needs, target)
+        pose = self._new_pose(e, obj, v) if v.pose else None
         changed = {k: val for k, val in v.sets.items() if obj.state.get(k) != val}
         obj.state.update(v.sets)
+        extra = {}
+        if v.pose:
+            e.pose, e.near = pose, obj.id
+            self._touch(e)
+            extra = {"pose": self._pose_view(e), "near": self._near_view(e)}
         fmt = {"actor": e.name, "object": f"the {name}", "target": f"the {self.obj_name(tool)}" if tool else ""}
         message = _format(v.message, fmt)
         ev = self._object_changed(obj, "state" if changed else "used", e, message, verb=verb, changed=changed,
-                                  target=tool.id if tool else None)
+                                  target=tool.id if tool else None, **extra)
         result = {"object": self.object_view(obj), "message": message, "event_id": ev.id}
         if v.reveal:
             result["reveal"] = _format(v.reveal, fmt)
         return result
+
+    def _new_pose(self, e: Entity, obj: Obj, v) -> dict | None:
+        """The pose a verb with `pose:` puts the actor in, or a Failure if it can't."""
+        name = self.obj_name(obj)
+        here = e.pose is not None and e.pose["object"] == obj.id
+        if v.pose == "standing":
+            if not here:
+                raise Failure(Reason.NOT_NOW, v.fail or f"You aren't on the {name}.", object=obj.id)
+            return None
+        if obj.loc_kind != "room":
+            raise Failure(Reason.NOT_NOW, f"Put the {name} down first.", object=obj.id)
+        if here:
+            return {**e.pose, "kind": v.pose}
+        others = [x for x in self.on_object(obj) if x.id != e.id]
+        taken = {x.pose["seat"] for x in others}
+        seat = next((i for i in range(self.obj_type(obj).seats) if i not in taken), None)
+        if seat is None:
+            raise Failure(Reason.OCCUPIED, f"There's no room on the {name}: {_names(others)} "
+                          f"{'is' if len(others) == 1 else 'are'} already there.",
+                          object=obj.id, entities=[x.id for x in others])
+        return {"kind": v.pose, "object": obj.id, "seat": seat}
 
     def _find_tool(self, e: Entity, needed_type: str, target: str | None) -> Obj:
         type_name = self.types[needed_type].name if needed_type in self.types else needed_type
@@ -699,6 +749,11 @@ def model_url(world_dir, path) -> str | None:
         return None
     rel = path.relative_to(world_dir.resolve()).as_posix()
     return f"{API_PREFIX}/world/files/{rel}?v={int(path.stat().st_mtime)}"
+
+
+def _names(entities: list[Entity]) -> str:
+    names = [x.name for x in entities]
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def _matches(state: dict, cond: dict) -> bool:

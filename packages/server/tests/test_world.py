@@ -146,7 +146,50 @@ def test_objects_never_duplicate(world):
     act(world, "otto", "put_down", object="key", into="box")
     locations = [(o.loc_kind, o.loc_id) for o in world.objects.values() if o.id == "key"]
     assert locations == [("container", "box")]
-    assert len(world.objects) == 8
+    assert len(world.objects) == 10
+
+
+def test_sit_and_lie_on_furniture(world):
+    for who in ("mia", "otto"):
+        act(world, who, "move", to="study")
+    result, batch = act(world, "kai", "interact", object="bench", verb="sit")
+    kai = world.entity_view(world.entities["kai"])
+    assert kai["pose"] == {"kind": "sitting", "object": "bench", "name": "bench", "seat": 0}
+    assert kai["near"]["id"] == "bench"
+    ev = batch.events[0]
+    assert ev.payload["pose"] == kai["pose"] and ev.payload["message"] == "Kai sits on the bench."
+    assert "kai" in batch.entities
+    act(world, "mia", "interact", object="bench", verb="lie")
+    assert world.entities["mia"].pose == {"kind": "lying", "object": "bench", "seat": 1}
+    f = fails(world, "otto", "interact", Reason.OCCUPIED, object="bench", verb="sit")
+    assert f.message == "There's no room on the bench: Kai and Mia are already there."
+    act(world, "mia", "interact", object="bench", verb="sit")  # changing pose keeps the seat
+    assert world.entities["mia"].pose["seat"] == 1
+    fails(world, "otto", "interact", Reason.NOT_NOW, object="bench", verb="stand")
+    act(world, "kai", "interact", object="bench", verb="stand")
+    assert world.entities["kai"].pose is None and world.entities["kai"].near == "bench"
+    act(world, "otto", "interact", object="bench", verb="sit")
+    assert world.entities["otto"].pose["seat"] == 0
+
+
+def test_moving_stands_you_up(world):
+    act(world, "kai", "interact", object="bench", verb="sit")
+    _, batch = act(world, "kai", "move", near="lamp")
+    assert world.entities["kai"].pose is None
+    assert batch.events[0].payload["pose"] is None
+    act(world, "kai", "interact", object="bench", verb="sit")
+    act(world, "kai", "move", to="hall")
+    assert world.entity_view(world.entities["kai"])["pose"] is None
+
+
+def test_cant_pick_up_what_someone_sits_on(world):
+    act(world, "mia", "move", to="study")
+    act(world, "kai", "interact", object="stool", verb="sit")
+    f = fails(world, "mia", "pick_up", Reason.OCCUPIED, object="stool")
+    assert f.message == "Kai is on the stool."
+    act(world, "kai", "move", near="lamp")
+    act(world, "mia", "pick_up", object="stool")
+    fails(world, "mia", "interact", Reason.NOT_NOW, object="stool", verb="sit")  # put it down first
 
 
 def test_bad_arguments(world):

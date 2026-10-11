@@ -11,7 +11,7 @@ names and version numbers so that every package agrees on them.
 # A client and server can talk when they share a MAJOR version. Each MAJOR has
 # its own URL prefix (/v1/...), so a server can serve several majors at once.
 PROTOCOL_MAJOR = 1
-PROTOCOL_MINOR = 2
+PROTOCOL_MINOR = 3
 PROTOCOL_VERSION = f"{PROTOCOL_MAJOR}.{PROTOCOL_MINOR}"
 SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)  # newest first; one entry per supported MAJOR
 API_PREFIX = f"/v{PROTOCOL_MAJOR}"
@@ -101,6 +101,12 @@ UPDATE = "update"
 AUTH_REQUIRED = "auth_required"
 VIEWER_AUTH = "viewer_auth"
 
+# Poses (1.3): an entity view's "pose" is null (standing) or
+# {"kind": <one of POSES>, "object": id, "name": object name, "seat": n}.
+SITTING = "sitting"
+LYING = "lying"
+POSES = (SITTING, LYING)
+
 # Avatars (1.1): uploaded over HTTP, see the protocol README.
 AVATAR_KINDS = ("vrm", "glb", "png")
 
@@ -125,6 +131,7 @@ class Reason:
     UNKNOWN_VERB = "unknown_verb"
     NOT_NOW = "not_now"
     NEEDS_ITEM = "needs_item"
+    OCCUPIED = "occupied"  # 1.3: every seat on that object is taken, or someone is on it
     CONVERSATION_MOVED_ON = "conversation_moved_on"
     TEXT_TOO_LONG = "text_too_long"
     INTERNAL_ERROR = "internal_error"

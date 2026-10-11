@@ -141,6 +141,43 @@ def test_import_warns_about_unpaired_exits(tmp_path, capsys):
     assert "exit:attic:ladder has no exit marker" in capsys.readouterr().out
 
 
+def test_check_reports_mistakes_and_writes_nothing(town_dir, capsys):
+    mb = _blockout()
+    nodes = mb.house((1, 1, 1))
+    kitchen = next(n for n in nodes if n.name == "room:kitchen")
+    kitchen.add(
+        mb.N("obj:kettle_2").add(mb.N("when:on=true")),  # kettles are hot, not on
+        mb.N("obj:street_lantern_1").add(mb.N("glow", light=(1, 1, 1, 544))),  # 10 W in Blender
+        mb.N("spot:teapot"), mb.N("seat:kettle_2"), mb.N("flor:kitchen"), mb.N("time:noon"),
+    )
+    mb.write_glb(town_dir / "kai.glb", nodes)
+    before = {p: p.read_bytes() for p in town_dir.rglob("*.yaml")}
+    with pytest.raises(SystemExit, match="6 warnings"):
+        cli(["import-glb", str(town_dir / "kai.glb"), "--world", str(town_dir), "--owner", "kai", "--check"])
+    out = capsys.readouterr().out
+    assert "when:on=true under obj:kettle_2: type 'kettle' has no state on (it has: filled, hot)" in out
+    assert "glow is 544 cd" in out
+    assert "spot:teapot has no matching obj:teapot" in out
+    assert "obj:kettle_2 has seat: markers, but type 'kettle' has no verb with a pose" in out
+    assert "flor:kitchen: unknown prefix 'flor:'" in out
+    assert "time:noon: unknown time of day noon" in out
+    assert {p: p.read_bytes() for p in town_dir.rglob("*.yaml")} == before
+    assert not (town_dir / "houses" / "kai.glb").exists()
+
+    cli(["import-glb", str(TOWN / "houses" / "mia.glb"), "--world", str(town_dir), "--owner", "mia", "--check"])
+    assert "no problems found" in capsys.readouterr().out
+
+
+def test_type_guesses():
+    from commonroom_server.scene_import import guess_type
+    types = {"kettle", "lantern", "lamp", "fixture"}
+    assert guess_type("kettle", types) == "kettle"
+    assert guess_type("big_kettle", types) == "kettle"
+    assert guess_type("kettle_2", types) == "kettle"
+    assert guess_type("street_lantern_1", types) == "lantern"
+    assert guess_type("street_light", types) == "fixture"
+
+
 def test_blockout_matches_the_committed_files(tmp_path):
     """worlds/town's .glb files are generated; regenerate them if this fails."""
     _blockout().main(["make_blockout.py", str(tmp_path)])
@@ -190,4 +227,15 @@ def test_unknown_type_error_lists_the_known_ones(town_dir):
     house["objects"][0]["type"] = "arcade"
     (town_dir / "houses" / "mia.yaml").write_text(yaml.safe_dump(house))
     with pytest.raises(ConfigError, match="unknown type 'arcade'.*fixture"):
+        load_world(town_dir)
+
+
+def test_bad_poses_are_refused(town_dir):
+    objects = town_dir / "objects.yaml"
+    text = objects.read_text()
+    objects.write_text(text.replace("    seats: 3\n", "    seats: 0\n", 1))
+    with pytest.raises(ConfigError, match="'sofa' has a verb with a pose, so it needs at least 1 seat"):
+        load_world(town_dir)
+    objects.write_text(text.replace("pose: sitting", "pose: squatting", 1))
+    with pytest.raises(ConfigError, match="pose must be one of sitting, lying, standing, not 'squatting'"):
         load_world(town_dir)

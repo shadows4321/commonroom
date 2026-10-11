@@ -50,6 +50,12 @@ SCRIPT = [
     ("mia", {"type": "look"}),
     ("mia", {"type": "move", "to": "east"}),
     ("mia", {"type": "interact", "object": "lamp", "verb": "switch_on"}),
+    ("mia", {"type": "interact", "object": "bench", "verb": "sit"}),
+    ("mia", {"type": "interact", "object": "bench", "verb": "stand"}),
+    ("mia", {"type": "interact", "object": "stool", "verb": "sit"}),
+    ("otto", {"type": "move", "to": "east"}),
+    ("otto", {"type": "pick_up", "object": "stool"}),
+    ("mia", {"type": "move", "near": "bench"}),
 ]
 
 

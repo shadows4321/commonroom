@@ -45,7 +45,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "interact",
         "description": "Use a verb on an object, e.g. open the cupboard, switch_on the lamp, read the letter. "
                        "Each object lists the verbs it currently supports. Some verbs need you to hold an item; "
-                       "pass it as target or it will be picked from what you hold.",
+                       "pass it as target or it will be picked from what you hold. Furniture verbs like sit or "
+                       "lie_down really sit or lay you down; moving anywhere stands you up again.",
         "input_schema": {"type": "object", "properties": {
             "object": {**_STR, "description": "Object id or name."},
             "verb": {**_STR, "description": "One of the object's listed verbs."},

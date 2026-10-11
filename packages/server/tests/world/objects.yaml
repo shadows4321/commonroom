@@ -23,3 +23,15 @@ types:
       switch_on: {requires: {on: false}, sets: {on: true}, fail: Already on.}
     schedule:
       - {at: "07:00", sets: {on: false}, requires: {on: true}, message: "{object} switches itself off."}
+  bench:
+    description: A long bench.
+    seats: 2
+    verbs:
+      sit: {pose: sitting, message: "{actor} sits on {object}."}
+      lie: {pose: lying, message: "{actor} stretches out on {object}."}
+      stand: {pose: standing, message: "{actor} gets up from {object}.", fail: "You're not on the bench."}
+  stool:
+    description: A three-legged stool.
+    portable: true
+    verbs:
+      sit: {pose: sitting}

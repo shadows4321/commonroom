@@ -95,3 +95,26 @@ types:
       smell: {description: smell the flowers, message: "{actor} leans in to smell {object}."}
     schedule:
       - {at: "12:00", sets: {watered: false}, requires: {watered: true}, message: "The midday sun dries out {object}."}
+
+  sofa:
+    description: A deep, saggy sofa with too many cushions.
+    seats: 3
+    verbs:
+      sit: {description: sit down on it, pose: sitting, message: "{actor} sinks into {object}."}
+      lie_down: {description: stretch out on it, pose: lying, message: "{actor} stretches out on {object}."}
+      get_up: {description: get up, pose: standing, message: "{actor} gets up from {object}.", fail: "You aren't on the sofa."}
+
+  bed:
+    description: A wide bed under a patchwork quilt.
+    seats: 2
+    verbs:
+      lie_down: {description: lie down in it, pose: lying, message: "{actor} climbs into {object}."}
+      sleep: {description: go to sleep in it, pose: lying, message: "{actor} curls up in {object} and drifts off to sleep."}
+      get_up: {description: get up, pose: standing, message: "{actor} gets out of {object}.", fail: "You aren't in the bed."}
+
+  bench:
+    description: A weathered wooden bench.
+    seats: 3
+    verbs:
+      sit: {description: sit down on it, pose: sitting, message: "{actor} sits down on {object}."}
+      get_up: {description: get up, pose: standing, message: "{actor} gets up from {object}.", fail: "You aren't on the bench."}

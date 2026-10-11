@@ -95,17 +95,22 @@ def _import_glb(args: argparse.Namespace) -> None:
     import shutil
 
     from .config import _read_yaml
-    from .scene_import import ImportProblem, import_house, import_town
+    from .config import FIXTURE
+    from .scene_import import ImportProblem, TypeInfo, import_house, import_town, type_info
 
     world_dir = Path(args.world)
     glb = Path(args.file)
     world_path = world_dir / "world.yaml"
     world = _read_yaml(world_path) if world_path.exists() else {"format_version": 2, "name": world_dir.name.title()}
     objects_path = world_dir / "objects.yaml"
-    known_types = set(((_read_yaml(objects_path) if objects_path.exists() else {}).get("types") or {}))
+    known_types = type_info((_read_yaml(objects_path) if objects_path.exists() else {}).get("types"))
+    known_types.setdefault(FIXTURE, TypeInfo(state=set()))
+    check = args.check
 
     def place(target: Path) -> str:
         """Copy the .glb into the world directory if it isn't there already; return its relative path."""
+        if check:
+            return target.relative_to(world_dir).as_posix()
         target.parent.mkdir(parents=True, exist_ok=True)
         if glb.resolve() != target.resolve():
             shutil.copyfile(glb, target)
@@ -116,9 +121,13 @@ def _import_glb(args: argparse.Namespace) -> None:
         if args.owner:
             house_path = world_dir / "houses" / f"{args.owner}.yaml"
             existing = _read_yaml(house_path) if house_path.exists() else {}
-            known = known_types | set(existing.get("types") or {})
+            known = {**known_types, **type_info(existing.get("types"))}
             house, warnings = import_house(glb, existing, known)
             model = place(world_dir / "houses" / f"{args.owner}.glb")
+            if check:
+                print(f"{glb}: {len(house['rooms'])} rooms, {len(house['objects'])} objects (nothing written)")
+                _report(warnings, check)
+                return
             house_path.parent.mkdir(parents=True, exist_ok=True)
             house_path.write_text(_HOUSE_HEADER + _dump(house))
             print(f"wrote {house_path}: {len(house['rooms'])} rooms, {len(house['objects'])} objects")
@@ -135,16 +144,29 @@ def _import_glb(args: argparse.Namespace) -> None:
                 print(f"added {args.owner}'s house on plot {plot} to {world_path}")
         else:
             world, warnings = import_town(glb, world, known_types)
+            if check:
+                print(f"{glb}: {len(world['rooms'])} town rooms, {len(world['plots'])} plots, "
+                      f"{len(world['objects'])} objects (nothing written)")
+                _report(warnings, check)
+                return
             world["scene"] = place(world_dir / "town.glb")
             world_path.write_text(_dump(world))
             print(f"wrote {world_path}: {len(world['rooms'])} town rooms, {len(world['plots'])} plots, "
                   f"{len(world['objects'])} objects")
     except ImportProblem as exc:
         sys.exit(f"can't import {glb}: {exc}")
-    for w in warnings:
-        print(f"warning: {w}")
+    _report(warnings, check)
     print("Check the object types (new objects get 'fixture' unless their id matches a type), "
           "then restart the server.")
+
+
+def _report(warnings: list[str], check: bool) -> None:
+    for w in warnings:
+        print(f"warning: {w}")
+    if check:
+        if warnings:
+            sys.exit(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}")
+        print("no problems found")
 
 
 _HOUSE_HEADER = """\
@@ -190,6 +212,8 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument("--world", required=True, help="world directory, e.g. worlds/town")
     imp.add_argument("--owner", help="for a house: the AI's id (writes houses/<owner>.yaml); omit for the town")
     imp.add_argument("--plot", help="for a new house: which plot it stands on (default: the first free one)")
+    imp.add_argument("--check", action="store_true",
+                     help="only report problems (exit status 1 if there are any); write nothing")
     imp.set_defaults(func=_import_glb)
 
     args = parser.parse_args(argv)

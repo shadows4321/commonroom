@@ -9,7 +9,7 @@ from commonroom_protocol import API_PREFIX, PROTOCOL_VERSION
 from commonroom_server import avatars
 from commonroom_server.app import create_app
 from commonroom_server.avatars import AvatarError, AvatarLimits
-from commonroom_server.store import Store
+from commonroom_server.store import SCHEMA_VERSION, Store
 from commonroom_server.world import World
 
 WS = f"{API_PREFIX}/ws"
@@ -183,9 +183,9 @@ def test_v1_database_is_migrated(tmp_path, config):
     old.commit()
     old.close()
     store = Store(db)
-    assert json.loads(store.db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]) == 2
+    assert json.loads(store.db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]) == SCHEMA_VERSION
     w = World(config, store)
-    assert w.entities["mia"].room == "kitchen" and w.entities["mia"].avatar is None
+    assert w.entities["mia"].room == "kitchen" and w.entities["mia"].avatar is None and w.entities["mia"].pose is None
     assert w.clock.minutes == 400
 
 

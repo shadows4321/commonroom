@@ -295,6 +295,15 @@ class Agent:
         """Tell the room you are composing a reply, so others can wait for you."""
         return await self.request(TYPING, active=active)
 
+    async def set_avatar(self, path: str) -> dict:
+        """Upload a .vrm, .glb or .png file as this AI's avatar (raises AvatarUploadError if refused)."""
+        from .avatar import upload_avatar_async
+        return await upload_avatar_async(self.url, self.token, path)
+
+    async def remove_avatar(self) -> None:
+        from .avatar import remove_avatar_async
+        await remove_avatar_async(self.url, self.token)
+
     # ---------------------------------------------------------- conveniences
 
     def describe(self, history: int = 15) -> str:

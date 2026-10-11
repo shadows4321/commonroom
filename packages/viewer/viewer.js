@@ -6,8 +6,35 @@
   const PROTOCOL_MAJOR = 1; // this viewer speaks protocol 1.x
   const params = new URLSearchParams(location.search);
   const server = params.get("server") || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
-  const token = params.get("token");
-  const wsUrl = `${server}/v${PROTOCOL_MAJOR}/ws/viewer${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  const httpBase = server.replace(/^ws/, "http"); // avatar URLs are relative to the server
+  const wsUrl = `${server}/v${PROTOCOL_MAJOR}/ws/viewer`;
+
+  // The viewer password is sent as a message after connecting (never in the URL), and kept
+  // for this tab, or on this device if "remember" was ticked.
+  const PASSWORD_KEY = "commonroom.viewerPassword";
+  const store = {
+    get() {
+      try { return sessionStorage.getItem(PASSWORD_KEY) || localStorage.getItem(PASSWORD_KEY); } catch { return null; }
+    },
+    set(value, remember) {
+      try {
+        sessionStorage.setItem(PASSWORD_KEY, value);
+        if (remember) localStorage.setItem(PASSWORD_KEY, value);
+      } catch { /* storage blocked: the password just lasts until the page closes */ }
+    },
+    clear() {
+      try { sessionStorage.removeItem(PASSWORD_KEY); localStorage.removeItem(PASSWORD_KEY); } catch { /* ignore */ }
+    },
+  };
+  let password = store.get();
+  if (params.has("token")) {
+    // Old-style ?token= links: take the password, then remove it from the address bar.
+    password = params.get("token");
+    store.set(password, false);
+    params.delete("token");
+    const rest = params.toString();
+    history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}`);
+  }
 
   const state = { rooms: new Map(), entities: new Map(), objects: new Map(), typing: new Set(), clock: null };
   let selectedRoom = "";
@@ -29,27 +56,70 @@
   // ------------------------------------------------------------------ socket
 
   let retry = 1000;
+  let waitingForLogin = false;
+  let usedPassword = false;
+
   function connect() {
     const ws = new WebSocket(wsUrl);
-    ws.onopen = () => { retry = 1000; setStatus(true); };
+    ws.onopen = () => { retry = 1000; };
     ws.onclose = () => {
       setStatus(false);
+      if (waitingForLogin) return; // reconnect when the password form is submitted
       setTimeout(connect, retry);
       retry = Math.min(retry * 2, 15000);
     };
     ws.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
-      if (data.type === "world_state") loadState(data);
-      else if (data.type === "update") applyUpdate(data);
-      else if (data.type === "error") addSystemLine(`Server: ${data.message}`);
+      if (data.type === "auth_required") {
+        usedPassword = true;
+        if (password) ws.send(JSON.stringify({ type: "viewer_auth", password }));
+        else { showLogin(""); ws.close(); }
+      } else if (data.type === "world_state") {
+        setStatus(true);
+        $("logout").hidden = !usedPassword;
+        loadState(data);
+      } else if (data.type === "update") {
+        applyUpdate(data);
+      } else if (data.type === "error" && data.reason === "unauthorized") {
+        password = null;
+        store.clear();
+        showLogin("That password didn't work.");
+      } else if (data.type === "error") {
+        addSystemLine(`Server: ${data.message}`);
+      }
     };
   }
 
   function setStatus(online) {
     const s = $("status");
-    s.textContent = online ? "live" : "reconnecting…";
+    s.textContent = online ? "live" : waitingForLogin ? "locked" : "reconnecting…";
     s.className = `status ${online ? "online" : "offline"}`;
   }
+
+  function showLogin(error) {
+    waitingForLogin = true;
+    $("login").hidden = false;
+    $("login-error").hidden = !error;
+    $("login-error").textContent = error;
+    $("login-password").value = "";
+    $("login-password").focus();
+    setStatus(false);
+  }
+
+  $("login-form").onsubmit = (e) => {
+    e.preventDefault();
+    password = $("login-password").value;
+    store.set(password, $("login-remember").checked);
+    $("login").hidden = true;
+    waitingForLogin = false;
+    retry = 1000;
+    connect();
+  };
+
+  $("logout").onclick = () => {
+    store.clear();
+    location.reload();
+  };
 
   // ------------------------------------------------------------------- state
 
@@ -124,6 +194,14 @@
       const chip = el("span", `person${e.online ? "" : " offline"}`);
       const avatar = el("span", "avatar", e.name.slice(0, 1).toUpperCase());
       avatar.style.background = colorFor(e.id);
+      if (e.avatar && e.avatar.thumbnail_url) {
+        const img = el("img");
+        img.src = httpBase + e.avatar.thumbnail_url;
+        img.alt = "";
+        img.loading = "lazy";
+        img.onerror = () => img.remove(); // fall back to the initial
+        avatar.append(img);
+      }
       const name = el("span", state.typing.has(e.id) ? "typing" : null, e.name);
       chip.append(avatar, name);
       const bits = [];
@@ -131,7 +209,7 @@
       if (e.holding.length) bits.push(`🤲 ${e.holding.map((h) => h.name).join(", ")}`);
       if (!e.online) bits.push("dozing");
       if (bits.length) chip.append(el("span", "meta", bits.join(" · ")));
-      chip.title = e.description || e.name;
+      chip.title = [e.description || e.name, avatarCredit(e.avatar)].filter(Boolean).join("\n");
       people.append(chip);
     }
     card.append(people);
@@ -142,6 +220,15 @@
     }
     card.append(things);
     return card;
+  }
+
+  function avatarCredit(avatar) {
+    if (!avatar) return "";
+    const m = avatar.meta || {};
+    const parts = [`Avatar: ${m.title || avatar.kind.toUpperCase()}`];
+    if (m.authors && m.authors.length) parts.push(`by ${m.authors.join(", ")}`);
+    if (m.license) parts.push(`(${m.license})`);
+    return parts.join(" ");
   }
 
   function renderObject(o) {

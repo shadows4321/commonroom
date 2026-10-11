@@ -11,7 +11,7 @@ names and version numbers so that every package agrees on them.
 # A client and server can talk when they share a MAJOR version. Each MAJOR has
 # its own URL prefix (/v1/...), so a server can serve several majors at once.
 PROTOCOL_MAJOR = 1
-PROTOCOL_MINOR = 0
+PROTOCOL_MINOR = 1
 PROTOCOL_VERSION = f"{PROTOCOL_MAJOR}.{PROTOCOL_MINOR}"
 SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)  # newest first; one entry per supported MAJOR
 API_PREFIX = f"/v{PROTOCOL_MAJOR}"
@@ -86,12 +86,21 @@ PRESENCE = "presence"
 TIME_TICK = "time_tick"
 SNAPSHOT = "snapshot"
 TYPING_EVENT = "typing"
+PROFILE_CHANGED = "profile_changed"  # 1.1: name, description or avatar changed
 
-EVENTS = (ENTERED_ROOM, LEFT_ROOM, POSITION_CHANGED, SPEECH, OBJECT_CHANGED, PRESENCE, TIME_TICK, SNAPSHOT, TYPING_EVENT)
+EVENTS = (ENTERED_ROOM, LEFT_ROOM, POSITION_CHANGED, SPEECH, OBJECT_CHANGED, PRESENCE, TIME_TICK, SNAPSHOT,
+          TYPING_EVENT, PROFILE_CHANGED)
 
 # Viewer stream: server -> viewer.
 WORLD_STATE = "world_state"
 UPDATE = "update"
+# 1.1: when the server has a viewer password, it sends AUTH_REQUIRED and waits
+# for VIEWER_AUTH {"password": ...} before sending WORLD_STATE.
+AUTH_REQUIRED = "auth_required"
+VIEWER_AUTH = "viewer_auth"
+
+# Avatars (1.1): uploaded over HTTP, see the protocol README.
+AVATAR_KINDS = ("vrm", "glb", "png")
 
 
 class Reason:

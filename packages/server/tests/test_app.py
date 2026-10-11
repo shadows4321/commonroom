@@ -121,3 +121,64 @@ def test_persistence_across_restart(tmp_path, config, agents):
     assert any(e.payload.get("text") == "remember me" for e in w2.recent["kitchen"])
     assert w2.next_event_id > max(e.id for e in w2.recent["kitchen"])
     assert len(w2.store.events()) >= 5
+
+
+# ------------------------------------------------------------ viewer password
+
+@pytest.fixture
+def locked_client(config, agents):
+    agents.viewer_password = "open-sesame"
+    app = create_app(config, agents, viewer_dir=None, clock_interval=0)
+    with TestClient(app) as c:
+        yield c
+
+
+def test_viewer_password_by_message(locked_client):
+    with locked_client.websocket_connect(f"{API_PREFIX}/ws/viewer") as viewer:
+        assert viewer.receive_json() == {"type": "auth_required", "protocol": PROTOCOL_VERSION}
+        viewer.send_json({"type": "viewer_auth", "password": "open-sesame"})
+        assert viewer.receive_json()["type"] == "world_state"
+
+
+def test_viewer_wrong_password(locked_client):
+    with locked_client.websocket_connect(f"{API_PREFIX}/ws/viewer") as viewer:
+        viewer.receive_json()
+        viewer.send_json({"type": "viewer_auth", "password": "guess"})
+        err = viewer.receive_json()
+        assert err["type"] == "error" and err["reason"] == "unauthorized"
+        with pytest.raises(WebSocketDisconnect) as exc:
+            viewer.receive_json()
+        assert exc.value.code == 4401
+
+
+def test_viewer_password_in_url_still_works(locked_client):
+    with locked_client.websocket_connect(f"{API_PREFIX}/ws/viewer?token=open-sesame") as viewer:
+        assert viewer.receive_json()["type"] == "world_state"
+
+
+def test_public_viewer_needs_no_password(client):
+    with client.websocket_connect(f"{API_PREFIX}/ws/viewer") as viewer:
+        assert viewer.receive_json()["type"] == "world_state"
+
+
+def test_http_api_needs_password(locked_client):
+    assert locked_client.get(f"{API_PREFIX}/api/state").status_code == 401
+    assert locked_client.get(f"{API_PREFIX}/api/state",
+                             headers={"Authorization": "Bearer wrong-one"}).status_code == 401
+    assert locked_client.get(f"{API_PREFIX}/api/state",
+                             headers={"Authorization": "Bearer open-sesame"}).status_code == 200
+    assert locked_client.get(f"{API_PREFIX}/api/events?token=open-sesame").status_code == 200
+    assert locked_client.get("/version").status_code == 200
+
+
+def test_viewer_password_config(tmp_path):
+    from commonroom_server.config import ConfigError, load_agents
+    path = tmp_path / "agents.yaml"
+    path.write_text("viewer_token: legacy-name-ok\nagents: []\n")
+    assert load_agents(path).viewer_password == "legacy-name-ok"
+    path.write_text("viewer_password: short\nagents: []\n")
+    with pytest.raises(ConfigError, match="at least 8"):
+        load_agents(path)
+    path.write_text("viewer_password: same-as-token\nagents: [{id: a, token: same-as-token}]\n")
+    with pytest.raises(ConfigError, match="same as an agent"):
+        load_agents(path)

@@ -3,341 +3,1215 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.0",
+  "$comment": "protocol_version 1.1",
   "$defs": {
-    "id": { "type": "string", "minLength": 1 },
-    "version": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" },
-    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
-
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
     "Clock": {
       "type": "object",
-      "required": ["minutes", "day", "hour", "minute", "time", "phase", "label"],
+      "required": [
+        "minutes",
+        "day",
+        "hour",
+        "minute",
+        "time",
+        "phase",
+        "label"
+      ],
       "properties": {
-        "minutes": { "type": "integer", "description": "World minutes since day 1, 00:00." },
-        "day": { "type": "integer", "minimum": 1 },
-        "hour": { "type": "integer", "minimum": 0, "maximum": 23 },
-        "minute": { "type": "integer", "minimum": 0, "maximum": 59 },
-        "time": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$" },
-        "phase": { "enum": ["night", "dawn", "morning", "afternoon", "evening"] },
-        "label": { "type": "string" }
-      }
-    },
-
-    "Location": {
-      "type": "object",
-      "required": ["kind", "id"],
-      "properties": {
-        "kind": { "enum": ["room", "container", "entity"] },
-        "id": { "$ref": "#/$defs/id" }
-      }
-    },
-
-    "Near": {
-      "type": ["object", "null"],
-      "required": ["kind", "id", "name"],
-      "properties": {
-        "kind": { "enum": ["entity", "object"] },
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" }
-      }
-    },
-
-    "Verb": {
-      "type": "object",
-      "required": ["verb", "description"],
-      "properties": {
-        "verb": { "type": "string" },
-        "description": { "type": "string" },
-        "needs": { "type": "string", "description": "Object type the actor must hold." }
-      }
-    },
-
-    "ObjectView": {
-      "type": "object",
-      "required": ["id", "type", "name", "description", "state", "portable", "location", "verbs"],
-      "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "type": { "type": "string" },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "state": { "type": "object" },
-        "portable": { "type": "boolean" },
-        "location": { "$ref": "#/$defs/Location" },
-        "verbs": { "type": "array", "items": { "$ref": "#/$defs/Verb" }, "description": "Verbs available in the current state." },
-        "container": {
-          "type": "object",
-          "required": ["open", "capacity"],
-          "properties": { "open": { "type": "boolean" }, "capacity": { "type": "integer" } }
+        "minutes": {
+          "type": "integer",
+          "description": "World minutes since day 1, 00:00."
         },
-        "contents": { "type": "array", "items": { "$ref": "#/$defs/ObjectView" }, "description": "Only present when the container is open." }
-      }
-    },
-
-    "EntityView": {
-      "type": "object",
-      "required": ["id", "name", "description", "room", "near", "online", "holding"],
-      "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "room": { "$ref": "#/$defs/id" },
-        "near": { "$ref": "#/$defs/Near" },
-        "online": { "type": "boolean" },
-        "holding": {
-          "type": "array",
-          "items": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } }
+        "day": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "minute": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 59
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$"
+        },
+        "phase": {
+          "enum": [
+            "night",
+            "dawn",
+            "morning",
+            "afternoon",
+            "evening"
+          ]
+        },
+        "label": {
+          "type": "string"
         }
       }
     },
-
+    "Location": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "room",
+            "container",
+            "entity"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "Near": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "kind",
+        "id",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "entity",
+            "object"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Verb": {
+      "type": "object",
+      "required": [
+        "verb",
+        "description"
+      ],
+      "properties": {
+        "verb": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "needs": {
+          "type": "string",
+          "description": "Object type the actor must hold."
+        }
+      }
+    },
+    "ObjectView": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "name",
+        "description",
+        "state",
+        "portable",
+        "location",
+        "verbs"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "state": {
+          "type": "object"
+        },
+        "portable": {
+          "type": "boolean"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "verbs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Verb"
+          },
+          "description": "Verbs available in the current state."
+        },
+        "container": {
+          "type": "object",
+          "required": [
+            "open",
+            "capacity"
+          ],
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "capacity": {
+              "type": "integer"
+            }
+          }
+        },
+        "contents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectView"
+          },
+          "description": "Only present when the container is open."
+        }
+      }
+    },
+    "EntityView": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "description",
+        "room",
+        "near",
+        "online",
+        "holding"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "room": {
+          "$ref": "#/$defs/id"
+        },
+        "near": {
+          "$ref": "#/$defs/Near"
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "holding": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "avatar": {
+          "$ref": "#/$defs/Avatar"
+        }
+      }
+    },
     "RoomView": {
       "type": "object",
-      "required": ["id", "name", "description", "exits", "map"],
+      "required": [
+        "id",
+        "name",
+        "description",
+        "exits",
+        "map"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
         "exits": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["direction", "to", "to_name"],
-            "properties": { "direction": { "type": "string" }, "to": { "type": "string" }, "to_name": { "type": "string" } }
+            "required": [
+              "direction",
+              "to",
+              "to_name"
+            ],
+            "properties": {
+              "direction": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "to_name": {
+                "type": "string"
+              }
+            }
           }
         },
-        "map": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+        "map": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
       }
     },
-
     "Snapshot": {
       "type": "object",
       "description": "Everything an AI can perceive right now.",
-      "required": ["you", "room", "occupants", "objects", "recent_events", "last_speech_seq", "clock", "max_carry"],
+      "required": [
+        "you",
+        "room",
+        "occupants",
+        "objects",
+        "recent_events",
+        "last_speech_seq",
+        "clock",
+        "max_carry"
+      ],
       "properties": {
         "you": {
-          "allOf": [{ "$ref": "#/$defs/EntityView" }],
-          "properties": { "holding": { "type": "array", "items": { "$ref": "#/$defs/ObjectView" } } }
+          "allOf": [
+            {
+              "$ref": "#/$defs/EntityView"
+            }
+          ],
+          "properties": {
+            "holding": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ObjectView"
+              }
+            }
+          }
         },
-        "room": { "$ref": "#/$defs/RoomView" },
-        "occupants": { "type": "array", "items": { "$ref": "#/$defs/EntityView" } },
-        "objects": { "type": "array", "items": { "$ref": "#/$defs/ObjectView" }, "description": "Objects lying in the room (top level)." },
-        "recent_events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
-        "last_speech_seq": { "type": "integer", "minimum": 0 },
-        "clock": { "$ref": "#/$defs/Clock" },
-        "max_carry": { "type": "integer", "minimum": 0 }
+        "room": {
+          "$ref": "#/$defs/RoomView"
+        },
+        "occupants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityView"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectView"
+          },
+          "description": "Objects lying in the room (top level)."
+        },
+        "recent_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          }
+        },
+        "last_speech_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clock": {
+          "$ref": "#/$defs/Clock"
+        },
+        "max_carry": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
-
     "Intent": {
       "description": "AI -> server. 'id' is chosen by the client and echoed in the ack or action_failed.",
       "type": "object",
-      "required": ["type"],
-      "properties": { "id": { "type": ["string", "integer", "null"] } },
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        }
+      },
       "oneOf": [
         {
           "properties": {
-            "type": { "const": "register" },
+            "type": {
+              "const": "register"
+            },
             "protocol": {
               "description": "Version(s) the client speaks, e.g. \"1.0\" or [\"2.0\", \"1.3\"].",
-              "oneOf": [{ "$ref": "#/$defs/version" }, { "type": "array", "items": { "$ref": "#/$defs/version" }, "minItems": 1 }]
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/version"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/version"
+                  },
+                  "minItems": 1
+                }
+              ]
             },
-            "token": { "type": "string" },
-            "client": { "type": "string", "description": "Free-form client name/version, for logs." },
-            "name": { "type": ["string", "null"] },
-            "description": { "type": ["string", "null"] }
+            "token": {
+              "type": "string"
+            },
+            "client": {
+              "type": "string",
+              "description": "Free-form client name/version, for logs."
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           },
-          "required": ["type", "protocol", "token"]
+          "required": [
+            "type",
+            "protocol",
+            "token"
+          ]
         },
         {
-          "properties": { "type": { "const": "move" }, "to": { "type": "string" }, "near": { "type": "string" } },
-          "required": ["type"],
-          "anyOf": [{ "required": ["to"] }, { "required": ["near"] }]
+          "properties": {
+            "type": {
+              "const": "move"
+            },
+            "to": {
+              "type": "string"
+            },
+            "near": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "to"
+              ]
+            },
+            {
+              "required": [
+                "near"
+              ]
+            }
+          ]
         },
         {
-          "properties": { "type": { "const": "say" }, "text": { "$ref": "#/$defs/text" }, "after_seq": { "type": "integer", "minimum": 0 } },
-          "required": ["type", "text"]
+          "properties": {
+            "type": {
+              "const": "say"
+            },
+            "text": {
+              "$ref": "#/$defs/text"
+            },
+            "after_seq": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
         },
         {
-          "properties": { "type": { "const": "whisper" }, "to": { "type": "string" }, "text": { "$ref": "#/$defs/text" } },
-          "required": ["type", "to", "text"]
+          "properties": {
+            "type": {
+              "const": "whisper"
+            },
+            "to": {
+              "type": "string"
+            },
+            "text": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "type",
+            "to",
+            "text"
+          ]
         },
         {
-          "properties": { "type": { "const": "shout" }, "text": { "$ref": "#/$defs/text" } },
-          "required": ["type", "text"]
+          "properties": {
+            "type": {
+              "const": "shout"
+            },
+            "text": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
         },
         {
-          "properties": { "type": { "const": "interact" }, "object": { "type": "string" }, "verb": { "type": "string" }, "target": { "type": "string" } },
-          "required": ["type", "object", "verb"]
+          "properties": {
+            "type": {
+              "const": "interact"
+            },
+            "object": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "object",
+            "verb"
+          ]
         },
         {
-          "properties": { "type": { "const": "pick_up" }, "object": { "type": "string" } },
-          "required": ["type", "object"]
+          "properties": {
+            "type": {
+              "const": "pick_up"
+            },
+            "object": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "object"
+          ]
         },
         {
-          "properties": { "type": { "const": "put_down" }, "object": { "type": "string" }, "into": { "type": "string" } },
-          "required": ["type", "object"]
+          "properties": {
+            "type": {
+              "const": "put_down"
+            },
+            "object": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "object"
+          ]
         },
         {
-          "properties": { "type": { "const": "give" }, "object": { "type": "string" }, "to": { "type": "string" } },
-          "required": ["type", "object", "to"]
+          "properties": {
+            "type": {
+              "const": "give"
+            },
+            "object": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "object",
+            "to"
+          ]
         },
         {
-          "properties": { "type": { "const": "look" }, "at": { "type": "string" } },
-          "required": ["type"]
+          "properties": {
+            "type": {
+              "const": "look"
+            },
+            "at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ]
         },
         {
-          "properties": { "type": { "const": "typing" }, "active": { "type": "boolean" } },
-          "required": ["type"]
+          "properties": {
+            "type": {
+              "const": "typing"
+            },
+            "active": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type"
+          ]
         }
       ]
     },
-
     "Event": {
       "description": "Server -> AI/viewer. Every event has these fields; the rest depends on 'type'. Unknown types must be ignored.",
       "type": "object",
-      "required": ["type", "event_id", "world_time", "room"],
+      "required": [
+        "type",
+        "event_id",
+        "world_time",
+        "room"
+      ],
       "properties": {
-        "type": { "type": "string" },
-        "event_id": { "type": "integer", "minimum": 1 },
-        "world_time": { "type": "integer" },
-        "room": { "type": ["string", "null"] }
+        "type": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "world_time": {
+          "type": "integer"
+        },
+        "room": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "type": { "const": "speech" } } },
-          "then": {
-            "required": ["mode", "speaker", "speaker_name", "text"],
+          "if": {
             "properties": {
-              "mode": { "enum": ["say", "whisper", "shout"] },
-              "speaker": { "type": "string" },
-              "speaker_name": { "type": "string" },
-              "text": { "type": ["string", "null"], "description": "null when a whisper is not meant for you (then redacted is true)." },
-              "seq": { "type": "integer", "description": "Per-room speech order; present on say and on a shout in its own room." },
-              "to": { "type": "string" },
-              "to_name": { "type": "string" },
-              "redacted": { "type": "boolean" },
-              "muffled": { "type": "boolean" },
-              "from_room": { "type": "string" },
-              "from_room_name": { "type": "string" }
+              "type": {
+                "const": "speech"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mode",
+              "speaker",
+              "speaker_name",
+              "text"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "say",
+                  "whisper",
+                  "shout"
+                ]
+              },
+              "speaker": {
+                "type": "string"
+              },
+              "speaker_name": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "null when a whisper is not meant for you (then redacted is true)."
+              },
+              "seq": {
+                "type": "integer",
+                "description": "Per-room speech order; present on say and on a shout in its own room."
+              },
+              "to": {
+                "type": "string"
+              },
+              "to_name": {
+                "type": "string"
+              },
+              "redacted": {
+                "type": "boolean"
+              },
+              "muffled": {
+                "type": "boolean"
+              },
+              "from_room": {
+                "type": "string"
+              },
+              "from_room_name": {
+                "type": "string"
+              }
             }
           }
         },
         {
-          "if": { "properties": { "type": { "enum": ["entered_room", "left_room", "position_changed", "presence", "typing"] } } },
-          "then": { "required": ["entity", "entity_name"] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "entered_room" } } },
-          "then": { "required": ["from", "entity_view"], "properties": { "entity_view": { "$ref": "#/$defs/EntityView" } } }
-        },
-        {
-          "if": { "properties": { "type": { "const": "left_room" } } },
-          "then": { "required": ["to", "to_name"] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "position_changed" } } },
-          "then": { "required": ["near"], "properties": { "near": { "$ref": "#/$defs/Near" } } }
-        },
-        {
-          "if": { "properties": { "type": { "const": "presence" } } },
-          "then": { "required": ["online"], "properties": { "online": { "type": "boolean" } } }
-        },
-        {
-          "if": { "properties": { "type": { "const": "typing" } } },
-          "then": { "required": ["active"], "properties": { "active": { "type": "boolean" } } }
-        },
-        {
-          "if": { "properties": { "type": { "const": "object_changed" } } },
-          "then": {
-            "required": ["change", "object", "message", "actor", "actor_name"],
+          "if": {
             "properties": {
-              "change": { "enum": ["picked_up", "put_down", "put_in", "given", "state", "used"] },
-              "object": { "$ref": "#/$defs/ObjectView" },
-              "message": { "type": "string" },
-              "actor": { "type": ["string", "null"] },
-              "verb": { "type": "string" },
-              "changed": { "type": "object" },
-              "recipient": { "type": "string" },
-              "scheduled": { "type": "boolean" }
+              "type": {
+                "enum": [
+                  "entered_room",
+                  "left_room",
+                  "position_changed",
+                  "presence",
+                  "typing",
+                  "profile_changed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "entity",
+              "entity_name"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "entered_room"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "from",
+              "entity_view"
+            ],
+            "properties": {
+              "entity_view": {
+                "$ref": "#/$defs/EntityView"
+              }
             }
           }
         },
         {
-          "if": { "properties": { "type": { "const": "time_tick" } } },
-          "then": { "required": ["clock", "phase_changed"], "properties": { "clock": { "$ref": "#/$defs/Clock" }, "phase_changed": { "type": "boolean" } } }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "left_room"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "to",
+              "to_name"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "position_changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "near"
+            ],
+            "properties": {
+              "near": {
+                "$ref": "#/$defs/Near"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "presence"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "online"
+            ],
+            "properties": {
+              "online": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "typing"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "active"
+            ],
+            "properties": {
+              "active": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "object_changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "change",
+              "object",
+              "message",
+              "actor",
+              "actor_name"
+            ],
+            "properties": {
+              "change": {
+                "enum": [
+                  "picked_up",
+                  "put_down",
+                  "put_in",
+                  "given",
+                  "state",
+                  "used"
+                ]
+              },
+              "object": {
+                "$ref": "#/$defs/ObjectView"
+              },
+              "message": {
+                "type": "string"
+              },
+              "actor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "verb": {
+                "type": "string"
+              },
+              "changed": {
+                "type": "object"
+              },
+              "recipient": {
+                "type": "string"
+              },
+              "scheduled": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "time_tick"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "clock",
+              "phase_changed"
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/Clock"
+              },
+              "phase_changed": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "profile_changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "entity_view"
+            ],
+            "properties": {
+              "entity_view": {
+                "$ref": "#/$defs/EntityView"
+              }
+            }
+          }
         }
       ]
     },
-
     "Welcome": {
       "type": "object",
-      "required": ["type", "protocol", "entity_id", "snapshot", "world", "server_version"],
+      "required": [
+        "type",
+        "protocol",
+        "entity_id",
+        "snapshot",
+        "world",
+        "server_version"
+      ],
       "properties": {
-        "type": { "const": "welcome" },
+        "type": {
+          "const": "welcome"
+        },
         "id": {},
-        "protocol": { "$ref": "#/$defs/version", "description": "The negotiated version." },
-        "server_version": { "type": "string" },
-        "world": { "type": "string" },
-        "entity_id": { "$ref": "#/$defs/id" },
-        "snapshot": { "$ref": "#/$defs/Snapshot" }
+        "protocol": {
+          "$ref": "#/$defs/version",
+          "description": "The negotiated version."
+        },
+        "server_version": {
+          "type": "string"
+        },
+        "world": {
+          "type": "string"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/id"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/Snapshot"
+        }
       }
     },
-
     "Ack": {
       "type": "object",
-      "required": ["type", "id", "intent", "result"],
-      "properties": { "type": { "const": "ack" }, "id": {}, "intent": { "type": "string" }, "result": { "type": "object" } }
+      "required": [
+        "type",
+        "id",
+        "intent",
+        "result"
+      ],
+      "properties": {
+        "type": {
+          "const": "ack"
+        },
+        "id": {},
+        "intent": {
+          "type": "string"
+        },
+        "result": {
+          "type": "object"
+        }
+      }
     },
-
     "ActionFailed": {
       "type": "object",
-      "required": ["type", "id", "intent", "reason", "message", "details"],
+      "required": [
+        "type",
+        "id",
+        "intent",
+        "reason",
+        "message",
+        "details"
+      ],
       "properties": {
-        "type": { "const": "action_failed" },
+        "type": {
+          "const": "action_failed"
+        },
         "id": {},
-        "intent": { "type": ["string", "null"] },
-        "reason": { "type": "string", "description": "Machine-readable; see Reason in commonroom_protocol. New reasons may appear in minor versions." },
-        "message": { "type": "string", "description": "Human/LLM-readable explanation." },
-        "details": { "type": "object" }
+        "intent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "description": "Machine-readable; see Reason in commonroom_protocol. New reasons may appear in minor versions."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human/LLM-readable explanation."
+        },
+        "details": {
+          "type": "object"
+        }
       }
     },
-
     "Error": {
       "type": "object",
-      "required": ["type", "reason", "message"],
+      "required": [
+        "type",
+        "reason",
+        "message"
+      ],
       "properties": {
-        "type": { "const": "error" },
-        "reason": { "enum": ["bad_request", "protocol_mismatch", "unauthorized", "replaced"] },
-        "message": { "type": "string" },
-        "supported_protocol_versions": { "type": "array", "items": { "$ref": "#/$defs/version" } }
+        "type": {
+          "const": "error"
+        },
+        "reason": {
+          "enum": [
+            "bad_request",
+            "protocol_mismatch",
+            "unauthorized",
+            "replaced"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "supported_protocol_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/version"
+          }
+        }
       }
     },
-
     "WorldState": {
       "type": "object",
-      "required": ["type", "protocol", "server_version", "name", "rooms", "entities", "objects", "recent_events", "clock"],
+      "required": [
+        "type",
+        "protocol",
+        "server_version",
+        "name",
+        "rooms",
+        "entities",
+        "objects",
+        "recent_events",
+        "clock"
+      ],
       "properties": {
-        "type": { "const": "world_state" },
-        "protocol": { "$ref": "#/$defs/version" },
-        "server_version": { "type": "string" },
-        "name": { "type": "string" },
-        "rooms": { "type": "array", "items": { "$ref": "#/$defs/RoomView" } },
-        "entities": { "type": "array", "items": { "$ref": "#/$defs/EntityView" } },
-        "objects": { "type": "array", "items": { "$ref": "#/$defs/ObjectView" }, "description": "Flat: no nested contents; use location." },
-        "recent_events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
-        "clock": { "$ref": "#/$defs/Clock" }
+        "type": {
+          "const": "world_state"
+        },
+        "protocol": {
+          "$ref": "#/$defs/version"
+        },
+        "server_version": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoomView"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityView"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectView"
+          },
+          "description": "Flat: no nested contents; use location."
+        },
+        "recent_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          }
+        },
+        "clock": {
+          "$ref": "#/$defs/Clock"
+        }
       }
     },
-
     "Update": {
       "type": "object",
-      "required": ["type", "events", "entities", "objects", "clock"],
+      "required": [
+        "type",
+        "events",
+        "entities",
+        "objects",
+        "clock"
+      ],
       "properties": {
-        "type": { "const": "update" },
-        "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
-        "entities": { "type": "array", "items": { "$ref": "#/$defs/EntityView" }, "description": "Entities that changed (full views)." },
-        "objects": { "type": "array", "items": { "$ref": "#/$defs/ObjectView" }, "description": "Objects that changed (flat views)." },
-        "clock": { "$ref": "#/$defs/Clock" }
+        "type": {
+          "const": "update"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityView"
+          },
+          "description": "Entities that changed (full views)."
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectView"
+          },
+          "description": "Objects that changed (flat views)."
+        },
+        "clock": {
+          "$ref": "#/$defs/Clock"
+        }
+      }
+    },
+    "Avatar": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "1.1. Uploaded with PUT /v1/avatar. URLs are relative to the server and content-addressed (they never change).",
+      "required": [
+        "kind",
+        "url",
+        "thumbnail_url",
+        "sha256",
+        "bytes",
+        "meta"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "vrm",
+            "glb",
+            "png"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A small image for 2D views: the PNG itself, a VRM's embedded thumbnail, or null."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "meta": {
+          "type": "object",
+          "description": "For VRM: vrm_version, title, authors, license, avatar_permission, commercial_usage, allow_redistribution. Always: vertices (models) or width/height (PNG)."
+        }
+      }
+    },
+    "AuthRequired": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "description": "1.1, viewer stream: the server has a viewer password; reply with ViewerAuth.",
+      "properties": {
+        "type": {
+          "const": "auth_required"
+        },
+        "protocol": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "ViewerAuth": {
+      "type": "object",
+      "required": [
+        "type",
+        "password"
+      ],
+      "description": "1.1, viewer -> server, first message after AuthRequired.",
+      "properties": {
+        "type": {
+          "const": "viewer_auth"
+        },
+        "password": {
+          "type": "string"
+        }
+      }
+    },
+    "AvatarProblem": {
+      "type": "object",
+      "required": [
+        "reason",
+        "message"
+      ],
+      "description": "1.1: error body of the avatar HTTP endpoints.",
+      "properties": {
+        "reason": {
+          "enum": [
+            "unauthorized",
+            "too_large",
+            "unsupported_type",
+            "invalid_avatar",
+            "not_self_contained",
+            "texture_too_large",
+            "too_detailed"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
       }
     }
   }

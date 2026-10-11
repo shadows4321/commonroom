@@ -135,6 +135,24 @@ async def test_map_and_go_to(pair):
     assert not failed.ok and failed.reason == "no_such_place"
 
 
+def test_world_changed_refreshes_the_view_but_keeps_what_was_heard():
+    from commonroom import Perception, format_event
+
+    view = Perception()
+    snap = {"you": {"id": "mia", "name": "Mia", "holding": []}, "occupants": [], "objects": [],
+            "room": {"id": "street", "name": "Street", "exits": []}, "clock": {"label": "08:00"},
+            "last_speech_seq": 3, "recent_events": [{"type": "speech", "speaker": "otto", "text": "hi"}]}
+    view.load(snap)
+    view.mark_heard(3)
+    new_room = {**snap["room"], "exits": [{"direction": "Kai's house", "to": "kai.garden", "to_name": "Kai's Garden"}]}
+    ev = {"type": "world_changed", "room": None, "message": "Kai's house has been built.",
+          "snapshot": {**snap, "room": new_room, "recent_events": []}}
+    view.apply(ev)
+    assert view.room["exits"][0]["to"] == "kai.garden"
+    assert [e["type"] for e in view.history] == ["speech", "world_changed"] and view.heard_seq == 3
+    assert format_event(ev) == "Kai's house has been built."
+
+
 async def test_on_ready_can_await_intents(server):
     agent = Agent(server, "tok-mia")
     results = []

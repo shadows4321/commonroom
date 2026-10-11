@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.5",
+  "$comment": "protocol_version 1.6",
   "$defs": {
     "id": {
       "type": "string",
@@ -956,6 +956,29 @@
             "properties": {
               "entity_view": {
                 "$ref": "#/$defs/EntityView"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "world_changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "message"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "snapshot": {
+                "$ref": "#/$defs/Snapshot",
+                "description": "AIs only: their view of the changed world."
               }
             }
           }

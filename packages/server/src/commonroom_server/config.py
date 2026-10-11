@@ -121,6 +121,7 @@ class WorldConfig:
     settings: Settings
     areas: dict[str, Area] = field(default_factory=dict)
     homes: dict[str, str] = field(default_factory=dict)  # agent id -> the room it starts in
+    plots: dict[str, str | None] = field(default_factory=dict)  # town plot -> its street room
     world_dir: Path | None = None
 
 
@@ -138,6 +139,7 @@ class AgentsConfig:
     agents: dict[str, AgentSpec]
     viewer_password: str | None = None
     public_viewer: bool = False  # explicitly allow watching without a password
+    admin_password: str | None = None  # the host's /admin page; None turns it off
 
 
 _TIME_RE = re.compile(r"^(?:day\s+(\d+)\s*,?\s*)?(\d{1,2}):(\d{2})$", re.IGNORECASE)
@@ -429,7 +431,8 @@ def load_world(world_dir: str | Path) -> WorldConfig:
     if settings.start_room not in rooms:
         raise ConfigError(f"start_room {settings.start_room!r} is not a room")
     return WorldConfig(name=raw.get("name", world_dir.name), rooms=rooms, types=types, objects=objects,
-                       settings=settings, areas=areas, homes=homes, world_dir=world_dir)
+                       settings=settings, areas=areas, homes=homes, world_dir=world_dir,
+                       plots={str(k): (v or {}).get("street") for k, v in (raw.get("plots") or {}).items()})
 
 
 def load_agents(path: str | Path) -> AgentsConfig:
@@ -453,4 +456,11 @@ def load_agents(path: str | Path) -> AgentsConfig:
         raise ConfigError("viewer_password must be at least 8 characters")
     if password in tokens:
         raise ConfigError("viewer_password must not be the same as an agent's token")
-    return AgentsConfig(agents=agents, viewer_password=password, public_viewer=bool(raw.get("public_viewer", False)))
+    admin = raw.get("admin_password")
+    admin = None if admin is None else str(admin)
+    if admin is not None and len(admin) < 8:
+        raise ConfigError("admin_password must be at least 8 characters")
+    if admin is not None and (admin in tokens or admin == password):
+        raise ConfigError("admin_password must differ from the viewer password and every agent's token")
+    return AgentsConfig(agents=agents, viewer_password=password, public_viewer=bool(raw.get("public_viewer", False)),
+                        admin_password=admin)

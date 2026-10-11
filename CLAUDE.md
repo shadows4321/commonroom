@@ -41,7 +41,7 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   both depend only on the protocol package, never on each other at runtime.
   The SDK's tests start a real in-process server, so they import the server
   (and its test fixtures in `packages/server/tests/`).
-- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`, `/avatar`,
+- `packages/viewer`: static HTML/JS served by the server (`/`, `/3d`, `/avatar`, `/admin`,
   `/viewer/*`). No build step; three.js and three-vrm are **vendored** in
   `packages/viewer/vendor` (refresh with `vendor/update.sh`, no CDN).
 
@@ -62,7 +62,14 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   sockets and viewers through per-connection queues. Also: the
   register/negotiate handshake, the viewer password (`auth_required` →
   `viewer_auth` message; `?token=` and `Authorization: Bearer` also work),
-  avatar upload/serve, and `/v1/world/files/*` for 3D models.
+  avatar upload/serve, and `/v1/world/files/*` for 3D models. `/v1/admin/*`
+  (the host's `/admin` page) needs `admin_password` and is 404 without one;
+  it isn't part of the wire protocol. Suspensions (`Hub.suspended`) are in
+  memory only; moves go through `World.teleport`. A house dropped on `/admin`
+  goes through `scene_import.install_house` (shared with `import-glb --owner`;
+  rolls the files back if the world stops loading), then `Hub.reload` builds
+  a new `World(config, store, carry_over=old)`, so state is kept, and sends
+  `world_changed` (with a snapshot per AI) and a fresh `world_state` to viewers.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A
@@ -104,7 +111,17 @@ house models: floors, exits, spots, seats, spawns, plots and gates for placement
 `when:` parts for object state; `time:` parts for time of day;
 `ext:`/`ceiling:`/`wall:` for cutaway. three.js's GLTFLoader strips `:` and
 `.` from names, so always read `node.userData.name`.
-`window.commonroom3d` exposes state for debugging and browser checks.
+Walking between rooms goes out-exit → plot `gate:` → in-exit → standing spot;
+those door points are marked `via`. A new move replaces the rest of a walk,
+except that after a room change the `via` points still ahead are kept, because
+`go_to` sends a move per room faster than characters walk, and dropping them
+cuts through walls and plots. `minimap.js` (the corner map) is plain 2D canvas:
+town3d.js hands it floor meshes, and it keeps only upward-facing triangles.
+Clicks (not camera drags) go through `pick()`: the nearest visible, solid hit, mapped via
+`model.objectNodes`, character groups, floors and house holders to an info card;
+`lookingInside` lifts a house's or room's `ext:`/`ceiling:` like following does.
+`window.commonroom3d` exposes state (including `minimap.roomAt(x, z)`, handy for
+checking a walk stays on floors) for debugging and browser checks.
 Headless Chromium (Playwright, `--use-angle=swiftshader`) renders it at a
 few frames per second, so anything frame-counted is slow there; prefer
 time-based logic.

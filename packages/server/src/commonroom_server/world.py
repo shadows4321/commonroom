@@ -16,7 +16,7 @@ from typing import Any
 
 from commonroom_protocol import (
     API_PREFIX, ENTERED_ROOM, LEFT_ROOM, MAX_TEXT_LENGTH, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE,
-    PROFILE_CHANGED, SPEECH, TIME_TICK, TYPING_EVENT, Reason,
+    PROFILE_CHANGED, SPEECH, TIME_TICK, TYPING_EVENT, WORLD_CHANGED, Reason,
 )
 
 from .clock import WorldClock, crossings
@@ -93,7 +93,9 @@ class Batch:
 
 
 class World:
-    def __init__(self, config: WorldConfig, store=None):
+    def __init__(self, config: WorldConfig, store=None, carry_over: World | None = None):
+        """`carry_over`: a running world whose people, objects, clock and recent events this one
+        takes over, for loading a changed world config without a restart."""
         self.config = config
         self.rooms = config.rooms
         self.types = config.types
@@ -109,7 +111,10 @@ class World:
         self.clock = WorldClock(cs.start, cs.minutes_per_real_second, cs.tick_minutes)
         self._pending = Batch()
 
-        loaded = store.load() if store is not None else None
+        if carry_over is not None:
+            loaded = carry_over.saved_state()
+        else:
+            loaded = store.load() if store is not None else None
         if loaded:
             self._restore(loaded)
         self._seed_missing_objects()
@@ -146,6 +151,21 @@ class World:
         for ev in data["events"]:
             self._remember(ev)
         self.next_event_id = data["next_event_id"]
+
+    def saved_state(self) -> dict:
+        """The world in the shape Store.load() returns it."""
+        return {
+            "clock_minutes": self.clock.minutes,
+            "speech_seq": dict(self.speech_seq),
+            "entities": list(self.entities.values()),
+            "objects": list(self.objects.values()),
+            "events": list(self.global_recent),
+            "next_event_id": self.next_event_id,
+        }
+
+    def world_changed(self, message: str) -> Event:
+        """Tell everyone the layout changed (1.6). The app adds each AI's fresh snapshot."""
+        return self._emit(WORLD_CHANGED, None, {"message": message})
 
     def _seed_missing_objects(self) -> None:
         for spec in self.config.objects:
@@ -445,6 +465,24 @@ class World:
         e.online = False
         self._touch(e)
         self._emit(PRESENCE, e.room, {"entity": e.id, "entity_name": e.name, "online": False})
+
+    def teleport(self, entity_id: str, room: str) -> None:
+        """Put someone in a room directly, without an exit (the host's /admin page)."""
+        e = self.entities[entity_id]
+        if room not in self.rooms:
+            raise Failure(Reason.NO_SUCH_PLACE, f"There is no room {room!r}.")
+        if room == e.room:
+            return
+        old = e.room
+        self._emit(LEFT_ROOM, old, {"entity": e.id, "entity_name": e.name, "to": room,
+                                    "to_name": self.rooms[room].name, "via": None})
+        e.room, e.near, e.pose = room, None, None
+        self._touch(e)
+        self._emit(ENTERED_ROOM, room, {"entity": e.id, "entity_name": e.name, "from": old,
+                                        "from_name": self.rooms[old].name, "via": None,
+                                        "entity_view": self.entity_view(e)})
+        for held in self.held_by(e.id):
+            self._touch(held)
 
     def any_online(self) -> bool:
         return any(e.online for e in self.entities.values())
@@ -814,7 +852,7 @@ def model_url(world_dir, path) -> str | None:
     if world_dir is None or path is None or not path.is_file():
         return None
     rel = path.relative_to(world_dir.resolve()).as_posix()
-    return f"{API_PREFIX}/world/files/{rel}?v={int(path.stat().st_mtime)}"
+    return f"{API_PREFIX}/world/files/{rel}?v={path.stat().st_mtime_ns}"
 
 
 def _names(entities: list[Entity]) -> str:

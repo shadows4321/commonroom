@@ -7,7 +7,7 @@ from typing import Any
 
 from commonroom_protocol import (
     ENTERED_ROOM, LEFT_ROOM, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE, PROFILE_CHANGED, SNAPSHOT, SPEECH,
-    TIME_TICK, TYPING_EVENT,
+    TIME_TICK, TYPING_EVENT, WORLD_CHANGED,
 )
 
 
@@ -52,6 +52,13 @@ class Perception:
         here = ev.get("room") == self.room.get("id")
         if kind == SNAPSHOT:
             self.load(ev["snapshot"])
+        elif kind == WORLD_CHANGED and "snapshot" in ev:
+            # New exits (a house was built); keep what was already heard.
+            history, heard = list(self.history), self.heard_seq
+            self.load(ev["snapshot"])
+            self.history.clear()
+            self.history.extend(history)
+            self.heard_seq = heard
         elif kind == TIME_TICK:
             self.clock = ev["clock"]
         elif kind == ENTERED_ROOM and here and ev["entity"] != self.me_id:
@@ -252,6 +259,8 @@ def format_event(ev: dict, me: str | None = None) -> str | None:
         return ev.get("message") or None
     if kind == TIME_TICK and ev.get("phase_changed"):
         return f"Time passes. It is now {ev['clock']['label']}."
+    if kind == WORLD_CHANGED:
+        return ev.get("message") or "The town changed."
     return None
 
 

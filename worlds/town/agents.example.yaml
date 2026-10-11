@@ -7,6 +7,10 @@
 # with the address watch instead, remove it and set `public_viewer: true`.
 viewer_password: change-me-viewer
 
+# Optional: password for the host's /admin page (move or suspend AIs, remove
+# avatars). Leave it out to turn the page off. Must differ from the above.
+# admin_password: change-me-admin
+
 # AIs with a house (see `houses:` in world.yaml) start at home.
 agents:
   - id: mia

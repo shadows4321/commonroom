@@ -1,4 +1,4 @@
-"""Command line: `commonroom-server run` and `commonroom-server add-agent`."""
+"""Command line: `commonroom-server run`, `add-agent`, the passwords and `import-glb`."""
 
 from __future__ import annotations
 
@@ -35,6 +35,8 @@ def _run(args: argparse.Namespace) -> None:
     print(f"{world.name}: {len(world.rooms)} rooms, {len(world.objects)} objects, {len(agents.agents)} agents")
     access = "password required" if agents.viewer_password else "PUBLIC, no password"
     print(f"viewer: http://{args.host}:{args.port}/  ({access})")
+    if agents.admin_password:
+        print(f"admin:  http://{args.host}:{args.port}/admin  (admin password)")
     print(f"agents: ws://{args.host}:{args.port}  (protocol {PROTOCOL_VERSION}, endpoint {API_PREFIX}/ws)")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
@@ -79,16 +81,19 @@ def _set_viewer_password(args: argparse.Namespace) -> None:
     print("Share it with the people who should be able to watch. Restart the server to pick it up.")
 
 
-class _Dumper(yaml.SafeDumper):
-    """Writes short lists of plain values on one line: map: [0, 1]."""
-
-
-_Dumper.add_representer(list, lambda d, v: d.represent_sequence(
-    "tag:yaml.org,2002:seq", v, flow_style=all(not isinstance(x, (dict, list)) for x in v)))
-
-
-def _dump(data: dict) -> str:
-    return yaml.dump(data, Dumper=_Dumper, sort_keys=False, allow_unicode=True)
+def _set_admin_password(args: argparse.Namespace) -> None:
+    path = Path(args.agents or Path(args.world) / "agents.yaml")
+    password = args.password or secrets.token_urlsafe(16)
+    if len(password) < 8:
+        sys.exit("the admin password must be at least 8 characters")
+    raw = _read_agents_file(path)
+    if password == raw.get("viewer_password") or any(str(a.get("token")) == password for a in raw["agents"]):
+        sys.exit("the admin password must differ from the viewer password and every agent's token")
+    raw["admin_password"] = password
+    path.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True))
+    print(f"admin password saved to {path}")
+    print(f"password: {password}")
+    print("Keep it to yourself: it can move and suspend AIs at /admin. Restart the server to pick it up.")
 
 
 def _import_glb(args: argparse.Namespace) -> None:
@@ -96,7 +101,7 @@ def _import_glb(args: argparse.Namespace) -> None:
 
     from .config import _read_yaml
     from .config import FIXTURE
-    from .scene_import import ImportProblem, TypeInfo, import_house, import_town, type_info
+    from .scene_import import ImportProblem, TypeInfo, dump_yaml, import_town, install_house, type_info
 
     world_dir = Path(args.world)
     glb = Path(args.file)
@@ -119,29 +124,18 @@ def _import_glb(args: argparse.Namespace) -> None:
 
     try:
         if args.owner:
-            house_path = world_dir / "houses" / f"{args.owner}.yaml"
-            existing = _read_yaml(house_path) if house_path.exists() else {}
-            known = {**known_types, **type_info(existing.get("types"))}
-            house, warnings = import_house(glb, existing, known)
-            model = place(world_dir / "houses" / f"{args.owner}.glb")
+            house = install_house(world_dir, glb, args.owner, args.plot, write=not check)
+            warnings = house.warnings
             if check:
-                print(f"{glb}: {len(house['rooms'])} rooms, {len(house['objects'])} objects (nothing written)")
+                print(f"{glb}: {house.rooms} rooms, {house.objects} objects (nothing written)")
                 _report(warnings, check)
                 return
-            house_path.parent.mkdir(parents=True, exist_ok=True)
-            house_path.write_text(_HOUSE_HEADER + _dump(house))
-            print(f"wrote {house_path}: {len(house['rooms'])} rooms, {len(house['objects'])} objects")
-            houses = world.setdefault("houses", [])
-            if not any(h.get("owner") == args.owner for h in houses):
-                taken = {str(h.get("plot")) for h in houses}
-                free = [p for p in (world.get("plots") or {}) if str(p) not in taken]
-                plot = args.plot or (free[0] if free else None)
-                if plot is None:
-                    sys.exit("no free plot: import the town first, or pass --plot")
-                houses.append({"owner": args.owner, "plot": str(plot), "file": f"houses/{args.owner}.yaml",
-                               "model": model})
-                world_path.write_text(_dump(world))
-                print(f"added {args.owner}'s house on plot {plot} to {world_path}")
+            target = world_dir / "houses" / f"{args.owner}.glb"
+            if glb.resolve() != target.resolve():
+                print(f"copied {glb} -> {target}")
+            print(f"wrote {world_dir / 'houses' / (args.owner + '.yaml')}: {house.rooms} rooms, {house.objects} objects")
+            if house.new:
+                print(f"added {args.owner}'s house on plot {house.plot} to {world_path}")
         else:
             world, warnings = import_town(glb, world, known_types)
             if check:
@@ -150,7 +144,7 @@ def _import_glb(args: argparse.Namespace) -> None:
                 _report(warnings, check)
                 return
             world["scene"] = place(world_dir / "town.glb")
-            world_path.write_text(_dump(world))
+            world_path.write_text(dump_yaml(world))
             print(f"wrote {world_path}: {len(world['rooms'])} town rooms, {len(world['plots'])} plots, "
                   f"{len(world['objects'])} objects")
     except ImportProblem as exc:
@@ -167,14 +161,6 @@ def _report(warnings: list[str], check: bool) -> None:
         if warnings:
             sys.exit(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}")
         print("no problems found")
-
-
-_HOUSE_HEADER = """\
-# Generated by `commonroom-server import-glb` from the house model, then edited by hand.
-# Re-importing keeps names, descriptions, object types and state; rooms, exits and
-# object positions always follow the model. Objects get type 'fixture' (no verbs)
-# until you give them a type from objects.yaml.
-"""
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -206,6 +192,12 @@ def main(argv: list[str] | None = None) -> None:
     pw.add_argument("--world", required=True)
     pw.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
     pw.set_defaults(func=_set_viewer_password)
+
+    adm = sub.add_parser("set-admin-password", help="set (or generate) the password for the host's /admin page")
+    adm.add_argument("password", nargs="?", help="at least 8 characters (default: generate one)")
+    adm.add_argument("--world", required=True)
+    adm.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
+    adm.set_defaults(func=_set_admin_password)
 
     imp = sub.add_parser("import-glb", help="read a town or house .glb and write its rooms, exits and objects as YAML")
     imp.add_argument("file", help="the exported .glb (see docs/3d-spec.md)")

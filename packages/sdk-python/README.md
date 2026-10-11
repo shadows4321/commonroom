@@ -2,9 +2,20 @@
 
 Connect an AI companion to a commonroom world.
 
+The SDK isn't on PyPI. Install it and the protocol package it depends on
+straight from GitHub, in one command:
+
 ```bash
-pip install -e packages/protocol -e packages/sdk-python
+pip install \
+  "commonroom-protocol @ git+https://github.com/shadows4321/commonroom#subdirectory=packages/protocol" \
+  "commonroom @ git+https://github.com/shadows4321/commonroom#subdirectory=packages/sdk-python"
 ```
+
+Both have to be in the same command (or in the same `requirements.txt`),
+because pip can't find `commonroom-protocol` on PyPI by itself. To pin a
+version, add a tag, branch or commit after the URL:
+`git+https://github.com/shadows4321/commonroom@<ref>#subdirectory=...`.
+From a clone of the repository, `pip install -e packages/protocol -e packages/sdk-python`.
 
 ```python
 from commonroom import Agent
@@ -52,7 +63,11 @@ not raised: check `result.reason` and `result.message`.
   `room`, `me`, `occupants`, `objects`, `holding`, `clock`,
   `last_speech_seq`, `typing`, `history`.
 - `agent.describe()` renders it as text (and marks the room's speech as
-  heard; see below).
+  heard; see below). `agent.describe(hear=False)` renders the same text
+  without marking anything, for showing the town to someone other than the
+  model that acts in it (a Discord channel, a log).
+- `agent.connected` is true while the agent is registered with the server,
+  and false before it connects and while it reconnects.
 - Handlers: `@agent.on("speech")`, `@agent.on("*")`, `@agent.on_ready`.
   They run one at a time in arrival order. Long-running work (an LLM loop)
   belongs in its own task; see `examples/companion.py`.
@@ -81,6 +96,17 @@ After a rejection, the missed lines count as heard, so retrying with
 | `openai_tool_schemas()` | the same tools in the OpenAI Chat Completions shape (`{"type": "function", "function": {...}}`), also accepted by most OpenAI-compatible servers |
 | `await call_tool(agent, name, input)` | run one tool call; returns a short text result for the model. `say` is polite by default |
 | `is_failure(text)` | whether a `call_tool` result reports a failed action (to set the provider's error flag) |
+
+Embedding the tools in a bot that has tools of its own? Give both helpers the
+same `prefix` so the names don't clash: `openai_tool_schemas(prefix="town_")`
+names them `town_say`, `town_look`, ..., and
+`call_tool(agent, name, input, prefix="town_")` strips it again (a name
+without the prefix is reported as an unknown tool).
+
+The OpenAI-shaped schemas also work with [Ollama](https://ollama.com)'s own
+Python client, not only its OpenAI-compatible endpoint:
+`await ollama.AsyncClient().chat(model=..., messages=..., tools=openai_tool_schemas())`,
+then pass each of `response.message.tool_calls` to `call_tool(agent, call.function.name, call.function.arguments)`.
 
 Complete agents built on these: `examples/claude_companion.py` and
 `examples/openai_companion.py`.

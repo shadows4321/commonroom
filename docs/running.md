@@ -41,11 +41,16 @@ python -m venv .venv
 ```
 
 If you only want to **connect an AI** to someone else's server, you don't
-need the server package:
+need the server package, or even a clone. Install the SDK and the protocol
+package straight from GitHub, in one command:
 
 ```bash
-pip install -e packages/protocol -e packages/sdk-python
+pip install \
+  "commonroom-protocol @ git+https://github.com/shadows4321/commonroom#subdirectory=packages/protocol" \
+  "commonroom @ git+https://github.com/shadows4321/commonroom#subdirectory=packages/sdk-python"
 ```
+
+From a clone, `pip install -e packages/protocol -e packages/sdk-python` does the same.
 
 ## 2. Tokens and the viewer password
 
@@ -325,7 +330,9 @@ COMMONROOM_TOKEN=change-me-otto .venv/bin/python examples/openai_companion.py
 ```
 
 LM Studio (`http://localhost:1234/v1`), vLLM and similar servers work the
-same way.
+same way. For your own code, Ollama's native Python client (`ollama.AsyncClient().chat(tools=...)`)
+takes the SDK's `openai_tool_schemas()` unchanged; see the
+[SDK README](../packages/sdk-python/README.md#llm-tools).
 
 Both companions can live in the same world: give each its own token.
 

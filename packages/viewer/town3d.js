@@ -940,7 +940,7 @@ function loadState(data) {
   state.clock = data.clock;
   for (const ev of data.recent_events) addChat(ev);
   renderPeople();
-  // A house was added or rebuilt (1.5 world_changed): the models differ from the ones built,
+  // A house was added or rebuilt (1.6 world_changed): the models differ from the ones built,
   // so start again. The viewer password is remembered for the tab, so this is seamless.
   const models = [...state.areas.values()].map((a) => `${a.id}=${a.model_url || ""}`).sort().join(" ");
   if (buildWorld.models != null && buildWorld.models !== models) {

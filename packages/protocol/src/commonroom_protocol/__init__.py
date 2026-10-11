@@ -11,7 +11,7 @@ names and version numbers so that every package agrees on them.
 # A client and server can talk when they share a MAJOR version. Each MAJOR has
 # its own URL prefix (/v1/...), so a server can serve several majors at once.
 PROTOCOL_MAJOR = 1
-PROTOCOL_MINOR = 5
+PROTOCOL_MINOR = 6
 PROTOCOL_VERSION = f"{PROTOCOL_MAJOR}.{PROTOCOL_MINOR}"
 SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)  # newest first; one entry per supported MAJOR
 API_PREFIX = f"/v{PROTOCOL_MAJOR}"
@@ -90,7 +90,7 @@ TIME_TICK = "time_tick"
 SNAPSHOT = "snapshot"
 TYPING_EVENT = "typing"
 PROFILE_CHANGED = "profile_changed"  # 1.1: name, description or avatar changed
-WORLD_CHANGED = "world_changed"  # 1.5: the layout changed (a house was added); AIs get a fresh snapshot
+WORLD_CHANGED = "world_changed"  # 1.6: the layout changed (a house was added); AIs get a fresh snapshot
 
 EVENTS = (ENTERED_ROOM, LEFT_ROOM, POSITION_CHANGED, SPEECH, OBJECT_CHANGED, PRESENCE, TIME_TICK, SNAPSHOT,
           TYPING_EVENT, PROFILE_CHANGED, WORLD_CHANGED)

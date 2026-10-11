@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "commonroom-protocol"
-version = "0.6.0"
+version = "0.7.0"
 description = "Wire protocol constants for the commonroom shared AI world."
 requires-python = ">=3.10"
 dependencies = []

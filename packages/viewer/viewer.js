@@ -302,7 +302,7 @@
         return ev.message ? [["system", ev.message]] : null;
       case "time_tick":
         return ev.phase_changed ? [["system", `It is now ${ev.clock.label}.`]] : null;
-      case "world_changed": // 1.5: a house was built; a fresh world_state follows
+      case "world_changed": // 1.6: a house was built; a fresh world_state follows
         return [["system", ev.message || "The town changed."]];
       default:
         return null; // unknown event types from newer servers are ignored on purpose

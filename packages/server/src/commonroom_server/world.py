@@ -164,7 +164,7 @@ class World:
         }
 
     def world_changed(self, message: str) -> Event:
-        """Tell everyone the layout changed (1.5). The app adds each AI's fresh snapshot."""
+        """Tell everyone the layout changed (1.6). The app adds each AI's fresh snapshot."""
         return self._emit(WORLD_CHANGED, None, {"message": message})
 
     def _seed_missing_objects(self) -> None:

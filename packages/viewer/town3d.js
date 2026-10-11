@@ -611,7 +611,14 @@ class Character {
     }
   }
 
-  walkTo(points, teleport) {
+  /**
+   * Walk through `points`. Points marked `via` are doors and gates; the last point is where they
+   * end up standing. A new destination replaces the rest of an old walk, except when `onward`
+   * (they have already left for another room): then the doors still ahead are walked through
+   * first, so someone crossing several rooms quickly (go_to sends one move per room, faster
+   * than we walk) follows the doors and the road instead of cutting through walls and gardens.
+   */
+  walkTo(points, teleport, onward = false) {
     if (!points.length) return;
     if (teleport || !this.group.visible) {
       this.group.position.copy(points[points.length - 1]);
@@ -619,12 +626,13 @@ class Character {
       this.group.visible = true;
       return;
     }
-    // A new destination replaces the rest of an old walk, starting from wherever they are now.
+    let keep = 0;
+    if (onward) for (let i = 0; i < this.path.length; i++) if (this.path[i].via) keep = i + 1;
+    this.path = this.path.slice(0, keep).concat(points.map((p) => Object.assign(p.clone(), { via: Boolean(p.via) })));
     let total = 0;
     let prev = this.group.position;
-    for (const p of points) { total += prev.distanceTo(p); prev = p; }
+    for (const p of this.path) { total += prev.distanceTo(p); prev = p; }
     this.speed = Math.max(WALK_SPEED, total / MAX_WALK_SECONDS);
-    this.path = points.map((p) => p.clone());
   }
 
   say(text, kind) {
@@ -774,17 +782,19 @@ function syncCharacter(entity, { teleport = false } = {}) {
   const place = standingPlace(entity);
   if (!place) { ch.group.visible = false; ch.room = entity.room; return; }
   const points = [];
-  if (!teleport && ch.room && ch.room !== entity.room) {
+  const via = (v) => Object.assign(v, { via: true });
+  const changedRoom = Boolean(ch.room && ch.room !== entity.room);
+  if (!teleport && changedRoom) {
     const out = exitMarker(ch.room, entity.room);
-    if (out) points.push(onFloor(ch.room, worldPos(out)));
+    if (out) points.push(via(onFloor(ch.room, worldPos(out))));
     const gate = gateBetween(ch.room, entity.room);
-    if (gate) points.push(worldPos(gate));
+    if (gate) points.push(via(worldPos(gate)));
     const inn = exitMarker(entity.room, ch.room);
-    if (inn) points.push(onFloor(entity.room, worldPos(inn)));
+    if (inn) points.push(via(onFloor(entity.room, worldPos(inn))));
   }
-  if (!ch.target || ch.target.distanceTo(place.pos) > 0.05 || ch.room !== entity.room) {
+  if (!ch.target || ch.target.distanceTo(place.pos) > 0.05 || changedRoom) {
     points.push(place.pos);
-    ch.walkTo(points, teleport);
+    ch.walkTo(points, teleport, changedRoom);
   }
   ch.target = place.pos;
   ch.room = entity.room;

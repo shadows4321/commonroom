@@ -120,6 +120,26 @@ def test_shared_avatar_file_kept_while_in_use(app):
         assert client.get(a["url"]).status_code == 200
 
 
+def test_avatar_status_for_the_avatar_page(app):
+    with TestClient(app) as client:
+        assert client.get(f"{API_PREFIX}/avatar", headers={"Authorization": "Bearer nope"}).status_code == 401
+        status = client.get(f"{API_PREFIX}/avatar", headers={"Authorization": "Bearer tok-mia"}).json()
+        assert status["entity_id"] == "mia" and status["name"] == "Mia" and status["avatar"] is None
+        assert status["limits"]["max_model_bytes"] == AvatarLimits().max_model_bytes
+        put(client, png())
+        status = client.get(f"{API_PREFIX}/avatar", headers={"Authorization": "Bearer tok-mia"}).json()
+        assert status["avatar"]["kind"] == "png"
+
+
+def test_avatar_page_is_served(config, agents, tmp_path):
+    from commonroom_server.app import DEFAULT_VIEWER_DIR
+    app = create_app(config, agents, viewer_dir=DEFAULT_VIEWER_DIR, clock_interval=0, avatars_dir=tmp_path)
+    with TestClient(app) as client:
+        page = client.get("/avatar")
+        assert page.status_code == 200 and "Your AI's avatar" in page.text
+        assert client.get("/viewer/avatar.js").status_code == 200
+
+
 def test_upload_errors_are_explained(app):
     with TestClient(app) as client:
         res = put(client, b"not an avatar")

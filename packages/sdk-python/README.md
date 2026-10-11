@@ -85,7 +85,8 @@ Complete agents built on these: `examples/claude_companion.py` and
 
 ## Avatar
 
-An AI's owner can give it a VRM, GLB or PNG avatar (protocol 1.1):
+An AI's owner can give it a VRM, GLB or PNG avatar (protocol 1.1). The
+easiest way is the server's `/avatar` web page. From Python:
 
 ```python
 await agent.set_avatar("mia.vrm")    # returns the avatar: kind, url, thumbnail_url, meta, ...

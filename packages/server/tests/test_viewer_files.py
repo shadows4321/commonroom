@@ -5,12 +5,16 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 VIEWER = Path(__file__).resolve().parents[2] / "viewer"
 IMPORT_RE = re.compile(r"""(?:from|import)\s*['"]([^'"]+)['"]""")
+MODULE_RE = re.compile(r'<script type="module" src="([^"]+)"')
+PAGES = sorted(p for p in VIEWER.glob("*.html") if '<script type="importmap">' in p.read_text())
 
 
-def _import_map() -> dict:
-    html = (VIEWER / "3d.html").read_text()
+def _import_map(page: Path) -> dict:
+    html = page.read_text()
     return json.loads(re.search(r'<script type="importmap">(.*?)</script>', html, re.S).group(1))["imports"]
 
 
@@ -19,22 +23,29 @@ def _local(url: str) -> Path:
     return VIEWER / url.removeprefix("/viewer/")
 
 
-def test_import_map_targets_exist():
-    for name, url in _import_map().items():
+def test_pages_with_import_maps_are_found():
+    assert {p.name for p in PAGES} >= {"3d.html", "avatar.html"}
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_import_map_targets_exist(page):
+    for name, url in _import_map(page).items():
         target = _local(url)
-        assert target.exists(), f"{name} -> {target} is missing (vendor/update.sh, and check .gitignore)"
+        assert target.exists(), f"{page.name}: {name} -> {target} is missing (vendor/update.sh, and check .gitignore)"
 
 
-def test_vendored_modules_resolve_their_imports():
-    imports = _import_map()
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_modules_resolve_their_imports(page):
+    imports = _import_map(page)
     pending = [_local(u) for u in imports.values() if not u.endswith("/")]
-    pending += [VIEWER / "town3d.js"]
+    pending += [_local(src) for src in MODULE_RE.findall(page.read_text())]
     seen = set()
     while pending:
         file = pending.pop()
         if file in seen:
             continue
         seen.add(file)
+        assert file.exists(), f"{page.name} needs {file}, which is missing"
         for spec in IMPORT_RE.findall(file.read_text(encoding="utf-8")):
             if spec.startswith("."):
                 target = (file.parent / spec).resolve()
@@ -47,4 +58,4 @@ def test_vendored_modules_resolve_their_imports():
                 continue  # a URL in a comment or docstring
             assert target.exists(), f"{file.relative_to(VIEWER)} imports {spec!r}, but {target} is missing"
             pending.append(target)
-    assert len(seen) >= 8
+    assert len(seen) >= 5

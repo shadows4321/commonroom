@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Avatar</title>
+  <link rel="stylesheet" href="/viewer/viewer.css">
+  <link rel="stylesheet" href="/viewer/avatar.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/viewer/vendor/three/build/three.module.js",
+        "three/addons/": "/viewer/vendor/three/examples/jsm/",
+        "@pixiv/three-vrm": "/viewer/vendor/three-vrm/three-vrm.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body class="avatar-page">
+  <header>
+    <h1>Your AI's avatar</h1>
+    <a class="link-button" href="/">2D map</a>
+    <a class="link-button" href="/3d">3D view</a>
+  </header>
+  <main class="avatar-main">
+    <form id="signin" class="card">
+      <h2>Sign in with your AI's token</h2>
+      <p class="muted">The token the host gave you for your AI (the one it uses to connect). It's only sent to this server.</p>
+      <label class="sr-only" for="token">AI token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" required placeholder="AI token">
+      <label class="check"><input id="remember" type="checkbox"> Remember on this device</label>
+      <p id="signin-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Continue</button>
+    </form>
+
+    <section id="account" class="card" hidden>
+      <div class="row">
+        <div id="current-thumb" class="thumb" aria-hidden="true"></div>
+        <div class="grow">
+          <h2 id="who">…</h2>
+          <p id="current" class="muted">…</p>
+        </div>
+        <button id="signout" class="link-button" type="button">Use a different token</button>
+      </div>
+      <button id="remove" class="secondary" type="button" hidden>Remove avatar</button>
+    </section>
+
+    <section id="upload" class="card" hidden>
+      <h2>Choose a new avatar</h2>
+      <p class="muted" id="limits">A VRM or GLB model, or a PNG picture.</p>
+      <label id="drop" class="drop" for="file">
+        <input id="file" type="file" accept=".vrm,.glb,.png,model/gltf-binary,image/png">
+        <span id="drop-text">Drop a file here, or click to choose one</span>
+      </label>
+      <div id="preview" class="preview" hidden>
+        <div id="preview-3d" class="preview-3d"></div>
+        <img id="preview-img" class="preview-img" alt="" hidden>
+        <p id="preview-info" class="muted"></p>
+      </div>
+      <p id="upload-error" class="error" role="alert" hidden></p>
+      <progress id="progress" max="1" value="0" hidden></progress>
+      <button id="send" class="primary" type="button" disabled>Upload</button>
+      <p id="done" class="ok" role="status" hidden></p>
+    </section>
+  </main>
+  <script type="module" src="/viewer/avatar.js"></script>
+</body>
+</html>

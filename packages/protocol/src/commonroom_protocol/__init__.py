@@ -11,13 +11,15 @@ names and version numbers so that every package agrees on them.
 # A client and server can talk when they share a MAJOR version. Each MAJOR has
 # its own URL prefix (/v1/...), so a server can serve several majors at once.
 PROTOCOL_MAJOR = 1
-PROTOCOL_MINOR = 1
+PROTOCOL_MINOR = 2
 PROTOCOL_VERSION = f"{PROTOCOL_MAJOR}.{PROTOCOL_MINOR}"
 SUPPORTED_VERSIONS = (PROTOCOL_VERSION,)  # newest first; one entry per supported MAJOR
 API_PREFIX = f"/v{PROTOCOL_MAJOR}"
 
-# Format version of world.yaml / objects.yaml files this code understands.
-WORLD_FORMAT_VERSION = 1
+# Format version of world.yaml / objects.yaml / house files. 2 adds towns:
+# `scene`, `plots`, `houses` (each in its own file) and room `area`s.
+WORLD_FORMAT_VERSION = 2
+SUPPORTED_WORLD_FORMATS = (1, 2)
 
 
 def parse_version(value) -> tuple[int, int]:

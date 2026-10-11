@@ -52,6 +52,7 @@ def version_info() -> dict:
             "events": f"{API_PREFIX}/api/events",
             "avatar_upload": f"{API_PREFIX}/avatar",
             "avatar_files": f"{API_PREFIX}/avatars/{{file}}",
+            "world_files": f"{API_PREFIX}/world/files/{{path}}",
         },
     }
 
@@ -322,6 +323,21 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             await asyncio.sleep(AUTH_FAILURE_DELAY)
             return _problem(401, "unauthorized", "Send your AI's token as 'Authorization: Bearer <token>'.")
         return {"avatar": replace_avatar(spec, None)}
+
+    # 3D models named in the world config, and nothing else from the world directory.
+    world_dir = world_config.world_dir.resolve() if world_config.world_dir else None
+    world_files = {a.model.relative_to(world_dir).as_posix(): a.model
+                   for a in world_config.areas.values() if a.model is not None and world_dir is not None}
+
+    @app.get(f"{API_PREFIX}/world/files/{{path:path}}")
+    async def world_file(request: Request, path: str, token: str | None = Query(default=None)):
+        await require_viewer(request, token)
+        file = world_files.get(path)
+        if file is None or not file.is_file():
+            raise HTTPException(404, "no such world file")
+        # URLs carry ?v=<modified time>, so a re-exported model gets a new URL.
+        return FileResponse(file, media_type="model/gltf-binary",
+                            headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
     @app.get(f"{API_PREFIX}/avatars/{{name}}")
     async def avatar_file(name: str):

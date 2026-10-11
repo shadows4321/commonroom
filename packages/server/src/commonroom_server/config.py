@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from commonroom_protocol import WORLD_FORMAT_VERSION
+from commonroom_protocol import SUPPORTED_WORLD_FORMATS, WORLD_FORMAT_VERSION
 
 
 class ConfigError(ValueError):
@@ -63,6 +63,22 @@ class Room:
     exits: dict[str, str] = field(default_factory=dict)  # direction -> room id
     map: tuple[int, int] = (0, 0)
     by_phase: dict[str, str] = field(default_factory=dict)  # extra description per time-of-day phase
+    area: str = "town"  # which part of the world it belongs to: "town", or a house's owner id
+
+
+STREET = "@street"  # in a house file, the exit target meaning "the street in front of this house"
+
+
+@dataclass
+class Area:
+    """A part of the world with its own 3D model: the town itself, or one house."""
+    id: str
+    name: str
+    kind: str  # "town" | "house"
+    owner: str | None = None
+    plot: str | None = None
+    model: Path | None = None  # .glb, relative paths resolved against the world directory
+    entrance: str | None = None  # house: the room whose exit leads to the street
 
 
 @dataclass
@@ -101,6 +117,9 @@ class WorldConfig:
     types: dict[str, ObjectType]
     objects: list[ObjectSpec]
     settings: Settings
+    areas: dict[str, Area] = field(default_factory=dict)
+    homes: dict[str, str] = field(default_factory=dict)  # agent id -> the room it starts in
+    world_dir: Path | None = None
 
 
 @dataclass
@@ -154,13 +173,14 @@ def _read_yaml(path: Path) -> Any:
         return yaml.load(f, Loader=_Loader) or {}
 
 
-def _check_format(raw: dict, path: Path) -> None:
+def _check_format(raw: dict, path: Path) -> int:
     version = raw.get("format_version")
+    readable = ", ".join(str(v) for v in SUPPORTED_WORLD_FORMATS)
     if version is None:
-        raise ConfigError(f"{path} is missing format_version (this server reads format_version: "
-                          f"{WORLD_FORMAT_VERSION})")
-    if version != WORLD_FORMAT_VERSION:
-        raise ConfigError(f"{path} has format_version {version!r}; this server reads {WORLD_FORMAT_VERSION}")
+        raise ConfigError(f"{path} is missing format_version (this server reads format_version {readable})")
+    if version not in SUPPORTED_WORLD_FORMATS:
+        raise ConfigError(f"{path} has format_version {version!r}; this server reads {readable}")
+    return version
 
 
 def _parse_type(type_id: str, raw: dict) -> ObjectType:
@@ -199,59 +219,160 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
     )
 
 
+def _parse_rooms(raw_rooms: dict, *, prefix: str = "", area: str = "town", name_prefix: str = "",
+                 map_offset: tuple[int, int] = (0, 0)) -> dict[str, Room]:
+    rooms: dict[str, Room] = {}
+    for rid, r in (raw_rooms or {}).items():
+        r = r or {}
+        local_name = r.get("name", str(rid).replace("_", " ").title())
+        mx, my = tuple(r.get("map", (0, 0)))
+        exits = {}
+        for direction, target in (r.get("exits") or {}).items():
+            target = str(target)
+            exits[str(direction)] = target if target == STREET else f"{prefix}{target}"
+        rooms[f"{prefix}{rid}"] = Room(
+            id=f"{prefix}{rid}",
+            name=f"{name_prefix}{local_name}",
+            description=r.get("description", ""),
+            exits=exits,
+            map=(map_offset[0] + int(mx), map_offset[1] + int(my)),
+            by_phase=dict(r.get("by_phase") or {}),
+            area=r.get("area", area) if not prefix else area,
+        )
+    return rooms
+
+
+def _parse_objects(raw_objects: list, types: dict[str, ObjectType], *, prefix: str = "", where: str) -> list[ObjectSpec]:
+    objects = []
+    for o in raw_objects or []:
+        oid = f"{prefix}{o['id']}"
+        if o.get("type") not in types:
+            raise ConfigError(f"{where}: object {o['id']!r} has unknown type {o.get('type')!r}")
+        if "room" in o:
+            kind, loc = "room", f"{prefix}{o['room']}"
+        elif "in" in o:
+            kind, loc = "container", f"{prefix}{o['in']}"
+        else:
+            raise ConfigError(f"{where}: object {o['id']!r} needs 'room' or 'in'")
+        objects.append(ObjectSpec(id=oid, type=o["type"], loc_kind=kind, loc_id=loc,
+                                  name=o.get("name"), description=o.get("description"),
+                                  state=dict(o.get("state") or {})))
+    return objects
+
+
+def _world_file(world_dir: Path, rel: str, what: str) -> Path:
+    """A path from a world file, which must stay inside the world directory."""
+    path = (world_dir / rel).resolve()
+    if world_dir.resolve() not in path.parents:
+        raise ConfigError(f"{what} {rel!r} is outside the world directory")
+    return path
+
+
+def _load_houses(raw: dict, world_dir: Path, rooms: dict[str, Room], types: dict[str, ObjectType],
+                 areas: dict[str, Area], homes: dict[str, str]) -> list[ObjectSpec]:
+    """Format 2: houses, one per AI, each with its own file of rooms and objects."""
+    plots = {str(k): (v or {}) for k, v in (raw.get("plots") or {}).items()}
+    objects: list[ObjectSpec] = []
+    used_plots: set[str] = set()
+    for h in raw.get("houses") or []:
+        owner = str(h["owner"])
+        plot = str(h["plot"])
+        where = f"house of {owner!r}"
+        if owner in areas:
+            raise ConfigError(f"{owner!r} has more than one house")
+        if plot not in plots:
+            raise ConfigError(f"{where} is on plot {plot!r}, which isn't listed under plots")
+        if plot in used_plots:
+            raise ConfigError(f"plot {plot!r} has more than one house")
+        used_plots.add(plot)
+        street = plots[plot].get("street")
+        if street not in rooms:
+            raise ConfigError(f"plot {plot!r} faces street {street!r}, which isn't a town room")
+
+        house_path = _world_file(world_dir, h.get("file", f"houses/{owner}.yaml"), f"{where} file")
+        if not house_path.exists():
+            raise ConfigError(f"{where}: {house_path} doesn't exist (run `commonroom-server import-glb`?)")
+        house = _read_yaml(house_path)
+        _check_format(house, house_path)
+        for tid, t in (house.get("types") or {}).items():
+            if tid in types:
+                raise ConfigError(f"{house_path}: type {tid!r} is already defined")
+            types[tid] = _parse_type(tid, t or {})
+
+        owner_name = h.get("owner_name", owner.replace("_", " ").title())
+        name = house.get("name", f"{owner_name}'s house")
+        pmap = tuple(plots[plot].get("map", (0, 0)))
+        house_rooms = _parse_rooms(house.get("rooms"), prefix=f"{owner}.", area=owner,
+                                   name_prefix=f"{owner_name}'s ", map_offset=(int(pmap[0]), int(pmap[1])))
+        if not house_rooms:
+            raise ConfigError(f"{house_path} has no rooms")
+        entrances = [r for r in house_rooms.values() if STREET in r.exits.values()]
+        if len(entrances) != 1:
+            raise ConfigError(f"{house_path} needs exactly one exit to {STREET!r} (found {len(entrances)})")
+        entrance = entrances[0]
+        for room in house_rooms.values():
+            for direction, target in list(room.exits.items()):
+                if target == STREET:
+                    room.exits[direction] = street
+        rooms[street].exits[name] = entrance.id  # the street side of the front door
+        clash = set(house_rooms) & set(rooms)
+        if clash:
+            raise ConfigError(f"{where}: room ids {sorted(clash)} are already used")
+        rooms.update(house_rooms)
+
+        model = h.get("model", f"houses/{owner}.glb")
+        areas[owner] = Area(id=owner, name=name, kind="house", owner=owner, plot=plot,
+                            model=_world_file(world_dir, model, f"{where} model") if model else None,
+                            entrance=entrance.id)
+        home = house.get("home")
+        homes[owner] = f"{owner}.{home}" if home else next(iter(house_rooms))
+        if homes[owner] not in rooms:
+            raise ConfigError(f"{house_path}: home {home!r} is not one of its rooms")
+        objects += _parse_objects(house.get("objects"), types, prefix=f"{owner}.", where=str(house_path))
+    return objects
+
+
 def load_world(world_dir: str | Path) -> WorldConfig:
-    """Load world.yaml (rooms, objects, settings) and objects.yaml (types) from a directory."""
+    """Load world.yaml (rooms, objects, settings, and for towns, houses) and objects.yaml (types)."""
     world_dir = Path(world_dir)
     raw = _read_yaml(world_dir / "world.yaml")
-    _check_format(raw, world_dir / "world.yaml")
+    version = _check_format(raw, world_dir / "world.yaml")
     types_raw = _read_yaml(world_dir / "objects.yaml") if (world_dir / "objects.yaml").exists() else {}
     if types_raw:
         _check_format(types_raw, world_dir / "objects.yaml")
     types_raw = types_raw.get("types", {})
 
     types = {tid: _parse_type(tid, t or {}) for tid, t in types_raw.items()}
-
-    rooms: dict[str, Room] = {}
-    for rid, r in (raw.get("rooms") or {}).items():
-        r = r or {}
-        rooms[rid] = Room(
-            id=rid,
-            name=r.get("name", rid.replace("_", " ").title()),
-            description=r.get("description", ""),
-            exits={str(k): str(v) for k, v in (r.get("exits") or {}).items()},
-            map=tuple(r.get("map", (0, 0))),
-            by_phase=dict(r.get("by_phase") or {}),
-        )
+    rooms = _parse_rooms(raw.get("rooms"))
     if not rooms:
         raise ConfigError("world has no rooms")
+
+    town_model = raw.get("scene")
+    areas = {"town": Area(id="town", name=raw.get("name", world_dir.name), kind="town",
+                          model=_world_file(world_dir, town_model, "scene") if town_model else None)}
+    homes: dict[str, str] = {}
+    objects = _parse_objects(raw.get("objects"), types, where="world.yaml")
+    if version >= 2:
+        objects += _load_houses(raw, world_dir, rooms, types, areas, homes)
+    elif raw.get("houses") or raw.get("scene"):
+        raise ConfigError("houses and scene need format_version 2")
+
     for room in rooms.values():
         for direction, target in room.exits.items():
             if target not in rooms:
                 raise ConfigError(f"room {room.id!r} exit {direction!r} leads to unknown room {target!r}")
 
-    objects: list[ObjectSpec] = []
     seen: set[str] = set()
-    for o in raw.get("objects") or []:
-        oid = o["id"]
-        if oid in seen:
-            raise ConfigError(f"duplicate object id {oid!r}")
-        seen.add(oid)
-        if o.get("type") not in types:
-            raise ConfigError(f"object {oid!r} has unknown type {o.get('type')!r}")
-        if "room" in o:
-            kind, loc = "room", o["room"]
-        elif "in" in o:
-            kind, loc = "container", o["in"]
-        else:
-            raise ConfigError(f"object {oid!r} needs 'room' or 'in'")
-        objects.append(ObjectSpec(id=oid, type=o["type"], loc_kind=kind, loc_id=loc,
-                                  name=o.get("name"), description=o.get("description"),
-                                  state=dict(o.get("state") or {})))
+    for spec in objects:
+        if spec.id in seen:
+            raise ConfigError(f"duplicate object id {spec.id!r}")
+        seen.add(spec.id)
+    by_id = {o.id: o for o in objects}
     for spec in objects:
         if spec.loc_kind == "room" and spec.loc_id not in rooms:
             raise ConfigError(f"object {spec.id!r} is in unknown room {spec.loc_id!r}")
         if spec.loc_kind == "container":
-            parent = next((p for p in objects if p.id == spec.loc_id), None)
+            parent = by_id.get(spec.loc_id)
             if parent is None or types[parent.type].container is None:
                 raise ConfigError(f"object {spec.id!r} is in {spec.loc_id!r}, which is not a container")
 
@@ -274,8 +395,8 @@ def load_world(world_dir: str | Path) -> WorldConfig:
     )
     if settings.start_room not in rooms:
         raise ConfigError(f"start_room {settings.start_room!r} is not a room")
-    return WorldConfig(name=raw.get("name", world_dir.name), rooms=rooms, types=types,
-                       objects=objects, settings=settings)
+    return WorldConfig(name=raw.get("name", world_dir.name), rooms=rooms, types=types, objects=objects,
+                       settings=settings, areas=areas, homes=homes, world_dir=world_dir)
 
 
 def load_agents(path: str | Path) -> AgentsConfig:

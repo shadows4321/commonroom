@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from commonroom_protocol import (
-    ENTERED_ROOM, LEFT_ROOM, MAX_TEXT_LENGTH, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE, PROFILE_CHANGED,
-    SPEECH, TIME_TICK, TYPING_EVENT, Reason,
+    API_PREFIX, ENTERED_ROOM, LEFT_ROOM, MAX_TEXT_LENGTH, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE,
+    PROFILE_CHANGED, SPEECH, TIME_TICK, TYPING_EVENT, Reason,
 )
 
 from .clock import WorldClock, crossings
@@ -123,7 +123,7 @@ class World:
                 self.speech_seq[rid] = seq
         for e in data["entities"]:
             if e.room not in self.rooms:
-                e.room, e.near = self.settings.start_room, None
+                e.room, e.near = self.config.homes.get(e.id, self.settings.start_room), None
             e.online = False
             self.entities[e.id] = e
         for o in data["objects"]:
@@ -329,6 +329,7 @@ class World:
             "description": desc,
             "exits": [{"direction": d, "to": to, "to_name": self.rooms[to].name} for d, to in room.exits.items()],
             "map": list(room.map),
+            "area": room.area,
         }
 
     def snapshot(self, entity_id: str) -> dict:
@@ -356,7 +357,24 @@ class World:
             "objects": [self.object_view(o, nested=False) for o in self.objects.values()],
             "recent_events": [ev.to_wire(reveal_private=reveal) for ev in self.global_recent],
             "clock": self.clock.view(),
+            "areas": [self.area_view(a) for a in self.config.areas.values()],
         }
+
+    def area_view(self, area) -> dict:
+        return {
+            "id": area.id,
+            "name": area.name,
+            "kind": area.kind,
+            "owner": area.owner,
+            "plot": area.plot,
+            "entrance": area.entrance,
+            "model_url": model_url(self.config.world_dir, area.model),
+        }
+
+    def home_of(self, spec: AgentSpec) -> str:
+        if spec.start_room in self.rooms:
+            return spec.start_room
+        return self.config.homes.get(spec.id, self.settings.start_room)
 
     # ------------------------------------------------------------ lifecycle
 
@@ -364,7 +382,7 @@ class World:
         """The entity for an agent, created (asleep, in its start room) the first time it's needed."""
         e = self.entities.get(spec.id)
         if e is None:
-            room = spec.start_room if spec.start_room in self.rooms else self.settings.start_room
+            room = self.home_of(spec)
             e = Entity(id=spec.id, name=name or spec.name, description=description or spec.description, room=room)
             self.entities[e.id] = e
             self._touch(e)
@@ -672,6 +690,15 @@ class World:
             view = self.clock.view()
             self._emit(TIME_TICK, None, {"clock": view, "phase_changed": view["phase"] != old_phase},
                        audience=None, log=False)
+
+
+def model_url(world_dir, path) -> str | None:
+    """URL of a 3D model file in the world directory, or None if it doesn't exist (yet).
+    The ?v= part changes whenever the file does, so browsers never show a stale model."""
+    if world_dir is None or path is None or not path.is_file():
+        return None
+    rel = path.relative_to(world_dir.resolve()).as_posix()
+    return f"{API_PREFIX}/world/files/{rel}?v={int(path.stat().st_mtime)}"
 
 
 def _matches(state: dict, cond: dict) -> bool:

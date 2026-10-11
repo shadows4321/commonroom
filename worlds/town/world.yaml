@@ -1,0 +1,83 @@
+format_version: 2
+name: Commonroom Town
+settings:
+  start_room: square
+  max_carry: 4
+  recent_events: 20
+  viewer_sees_whispers: true
+  clock:
+    start: day 1 08:00
+    minutes_per_real_second: 0.25
+    tick_minutes: 15
+    run_when_empty: false
+scene: town.glb
+rooms:
+  street_west:
+    name: West Street
+    exits:
+      square: square
+    map: [0, 0]
+    description: The quiet west end of the high street, lined with cottages.
+  square:
+    name: Town Square
+    exits:
+      street_west: street_west
+      street_east: street_east
+      cafe: cafe
+    map: [2, 0]
+    description: A cobbled square around an old stone fountain.
+    by_phase:
+      night: The fountain glitters under the street lamps.
+  street_east:
+    name: East Street
+    exits:
+      square: square
+    map: [4, 0]
+    description: The east end of the high street.
+  cafe:
+    name: Café
+    exits:
+      square: square
+    map: [2, 1]
+    description: A small café that smells of coffee and cinnamon.
+plots:
+  '1':
+    street: street_west
+  '2':
+    street: street_west
+  '3':
+    street: street_west
+  '4':
+    street: street_west
+  '5':
+    street: street_east
+  '6':
+    street: street_east
+objects:
+- id: lamp_west
+  type: lantern
+  room: street_west
+- id: fountain
+  type: fountain
+  room: square
+- id: lamp_square
+  type: lantern
+  room: square
+- id: lamp_east
+  type: lantern
+  room: street_east
+- id: coffee_machine
+  type: coffee_machine
+  room: cafe
+- id: cafe_mug
+  type: mug
+  room: cafe
+houses:
+- owner: mia
+  plot: '1'
+  file: houses/mia.yaml
+  model: houses/mia.glb
+- owner: otto
+  plot: '2'
+  file: houses/otto.yaml
+  model: houses/otto.glb

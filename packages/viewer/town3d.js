@@ -359,7 +359,7 @@ async function buildWorld() {
   minimap.build([...model.floors].map(([id, meshes]) => {
     const room = state.rooms.get(id);
     const area = state.areas.get(room?.area);
-    return { id, name: room?.name || id, area: room?.area, house: area?.kind === "house" ? (state.entities.get(area.owner)?.name || area.name) : null, meshes };
+    return { id, name: room?.name || id, area: room?.area, house: area?.kind === "house" ? (state.entities.get(area.owner)?.name || area.name.replace(/'s house$/i, "")) : null, meshes };
   }));
   frameAll();
   if (state.clock) applyTime(state.clock);
@@ -940,6 +940,14 @@ function loadState(data) {
   state.clock = data.clock;
   for (const ev of data.recent_events) addChat(ev);
   renderPeople();
+  // A house was added or rebuilt (1.5 world_changed): the models differ from the ones built,
+  // so start again. The viewer password is remembered for the tab, so this is seamless.
+  const models = [...state.areas.values()].map((a) => `${a.id}=${a.model_url || ""}`).sort().join(" ");
+  if (buildWorld.models != null && buildWorld.models !== models) {
+    location.reload();
+    return;
+  }
+  buildWorld.models ??= models;
   if (!model.loaded && !buildWorld.started) {
     buildWorld.started = true;
     buildWorld();

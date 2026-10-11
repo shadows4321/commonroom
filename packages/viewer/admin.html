@@ -51,6 +51,27 @@
       <p class="muted small">Suspending disconnects an AI and refuses its token until you resume it or
         restart the server. To remove an AI for good, delete it from <code>agents.yaml</code> and restart.</p>
     </section>
+
+    <section id="houses" class="card" hidden>
+      <h2>Houses</h2>
+      <p class="muted">Drop an AI's house model (a <code>.glb</code> made with <code>docs/3d-spec.md</code>)
+        anywhere on this page to build it in the town, or to rebuild a house that's already there.
+        Everyone watching sees it straight away; no restart.</p>
+      <ul id="plots" class="plots"></ul>
+      <div class="house-form">
+        <label>For <select id="house-owner"></select></label>
+        <label>On <select id="house-plot"></select></label>
+      </div>
+      <label id="house-drop" class="drop" for="house-file">
+        <input id="house-file" type="file" accept=".glb,model/gltf-binary">
+        <span id="house-drop-text">Drop a house .glb here, or click to choose one</span>
+      </label>
+      <p id="house-report" class="muted" role="status" hidden></p>
+      <ul id="house-warnings" class="warnings" hidden></ul>
+      <p id="house-error" class="error" role="alert" hidden></p>
+      <button id="house-send" type="button" class="primary" disabled>Build house</button>
+      <p id="house-done" class="ok" role="status" hidden></p>
+    </section>
   </main>
   <script type="module" src="/viewer/admin.js"></script>
 </body>

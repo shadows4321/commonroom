@@ -1,6 +1,7 @@
 // The /admin page: the host signs in with agents.yaml's admin_password and sees who is
 // connected and where, and can move an AI to a room, suspend or resume it, or remove its
-// avatar. Everything goes through /v1/admin, which answers each action with the new status.
+// avatar, and drop a house model (.glb) on the page to build an AI's house in the town.
+// Everything goes through /v1/admin, which answers each action with the new status.
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const server = params.get("server") || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
@@ -70,6 +71,7 @@ async function signIn(candidate) {
   }
   $("signin").hidden = true;
   $("overview").hidden = $("people").hidden = $("signout").hidden = false;
+  $("houses").hidden = !reply.data.can_add_houses;
   render(reply.data);
   clearInterval(timer);
   timer = setInterval(refresh, REFRESH_MS);
@@ -78,7 +80,7 @@ async function signIn(candidate) {
 
 async function refresh() {
   // Don't redraw under someone choosing from a dropdown.
-  if (document.activeElement && document.activeElement.closest("#agents select")) return;
+  if (document.activeElement && document.activeElement.closest("#agents select, #houses select")) return;
   try {
     const { res, data } = await api("GET", "");
     if (res.status === 401) return signOut();
@@ -123,6 +125,7 @@ function render(data) {
   ];
   $("facts").replaceChildren(...facts.map(([k, v]) => el("div", {}, el("dt", { textContent: k }), el("dd", { textContent: String(v) }))));
   $("agents").replaceChildren(...data.agents.map(row));
+  renderHouses(data);
   $("refreshed").textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
 
@@ -197,6 +200,166 @@ async function act(button, method, path, body, done) {
     button.disabled = false;
   }
 }
+
+// ----------------------------------------------------------------- houses
+
+let houseFile = null;
+let checked = null; // the check result for houseFile with the owner and plot chosen now
+
+function renderHouses(data) {
+  if (!data.can_add_houses) return;
+  const names = Object.fromEntries(data.agents.map((a) => [a.id, a.name]));
+  $("plots").replaceChildren(...data.plots.map((p) => el("li", { className: p.owner ? "" : "free" },
+    el("div", { textContent: p.owner ? `${names[p.owner] || p.owner}'s house` : "Empty plot" }),
+    el("div", { className: "sub", textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` }))));
+
+  const owner = $("house-owner");
+  const ownerWas = owner.value;
+  const houseOf = Object.fromEntries(data.plots.filter((p) => p.owner).map((p) => [p.owner, p.id]));
+  owner.replaceChildren(...data.agents.filter((a) => a.in_agents_file).map((a) => el("option", {
+    value: a.id, textContent: houseOf[a.id] ? `${a.name} (rebuild their house)` : a.name })));
+  // Default to the first AI without a house: that's usually who the new model is for.
+  owner.value = ownerWas || (data.agents.find((a) => a.in_agents_file && !houseOf[a.id]) || {}).id || owner.value;
+
+  const plot = $("house-plot");
+  const plotWas = plot.value;
+  const mine = houseOf[owner.value];
+  if (mine) {
+    plot.replaceChildren(el("option", { value: "", textContent: `Plot ${mine} (their plot)` }));
+  } else {
+    const free = data.plots.filter((p) => !p.owner);
+    plot.replaceChildren(el("option", { value: "", textContent: free.length ? "First empty plot" : "No empty plots" }),
+      ...free.map((p) => el("option", { value: p.id, textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` })));
+    if ([...plot.options].some((o) => o.value === plotWas)) plot.value = plotWas;
+  }
+  plot.disabled = Boolean(mine);
+}
+
+function houseQuery(check) {
+  const q = new URLSearchParams();
+  if ($("house-plot").value) q.set("plot", $("house-plot").value);
+  if (check) q.set("check", "true");
+  return `/houses/${encodeURIComponent($("house-owner").value)}?${q}`;
+}
+
+async function sendHouse(check) {
+  const res = await fetch(`${httpBase}/v1/admin${houseQuery(check)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${password}`, "Content-Type": "model/gltf-binary" },
+    body: houseFile,
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* not JSON */ }
+  if (res.status === 401) signOut();
+  return { res, data };
+}
+
+function clearHouseMessages() {
+  for (const id of ["house-report", "house-error", "house-done"]) show(id, "");
+  $("house-warnings").hidden = true;
+  $("house-warnings").replaceChildren();
+}
+
+async function checkHouse() {
+  clearHouseMessages();
+  checked = null;
+  $("house-send").disabled = true;
+  if (!houseFile) return;
+  if (!/\.glb$/i.test(houseFile.name) && houseFile.type !== "model/gltf-binary") {
+    show("house-error", "That isn't a .glb file. Export the house from Blender as glTF Binary (.glb).");
+    return;
+  }
+  show("house-report", "Checking the model…");
+  let reply;
+  try {
+    reply = await sendHouse(true);
+  } catch {
+    show("house-report", "");
+    show("house-error", "Couldn't reach the server.");
+    return;
+  }
+  show("house-report", "");
+  if (!reply.res.ok) {
+    show("house-error", reply.data.message || reply.data.detail || `The server said ${reply.res.status}.`);
+    return;
+  }
+  const h = reply.data.house;
+  const who = $("house-owner").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") || h.owner;
+  show("house-report", `${houseFile.name}: ${h.rooms} room${h.rooms === 1 ? "" : "s"} and ${h.objects} `
+    + `object${h.objects === 1 ? "" : "s"}, for ${who} on plot ${h.plot}.`
+    + (h.new ? "" : " This replaces their current house; names, descriptions and object types you edited are kept."));
+  if (h.warnings.length) {
+    $("house-warnings").replaceChildren(...h.warnings.map((w) => el("li", { textContent: w })));
+    $("house-warnings").hidden = false;
+  }
+  checked = h;
+  $("house-send").textContent = h.new ? `Build ${who}'s house` : `Rebuild ${who}'s house`;
+  $("house-send").disabled = false;
+}
+
+function chooseHouse(file) {
+  houseFile = file;
+  $("house-drop-text").textContent = file ? file.name : "Drop a house .glb here, or click to choose one";
+  checkHouse();
+}
+
+$("house-file").onchange = () => chooseHouse($("house-file").files[0] || null);
+$("house-owner").onchange = () => { renderHouses(status); checkHouse(); };
+$("house-plot").onchange = () => checkHouse();
+
+// Drop a .glb anywhere on the page once signed in.
+let dragDepth = 0;
+const draggingFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+document.addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e) || $("houses").hidden) return;
+  dragDepth += 1;
+  document.body.classList.add("dragging");
+});
+document.addEventListener("dragleave", () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) document.body.classList.remove("dragging");
+});
+document.addEventListener("dragover", (e) => { if (draggingFiles(e) && !$("houses").hidden) e.preventDefault(); });
+document.addEventListener("drop", (e) => {
+  if ($("houses").hidden || !e.dataTransfer?.files.length) return;
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove("dragging");
+  chooseHouse(e.dataTransfer.files[0]);
+  $("houses").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("house-send").onclick = async () => {
+  if (!houseFile || !checked) return;
+  const button = $("house-send");
+  button.disabled = true;
+  show("house-error", "");
+  show("house-report", "Building…");
+  let reply;
+  try {
+    reply = await sendHouse(false);
+  } catch {
+    show("house-report", "");
+    show("house-error", "Couldn't reach the server.");
+    button.disabled = false;
+    return;
+  }
+  show("house-report", "");
+  if (!reply.res.ok) {
+    show("house-error", reply.data.message || reply.data.detail || `The server said ${reply.res.status}.`);
+    button.disabled = false;
+    return;
+  }
+  const h = reply.data.house;
+  render(reply.data.status);
+  show("house-done", `${h.new ? "Built" : "Rebuilt"} the house on plot ${h.plot}. Everyone watching sees it now.`);
+  houseFile = null;
+  checked = null;
+  $("house-file").value = "";
+  $("house-drop-text").textContent = "Drop a house .glb here, or click to choose one";
+  $("house-warnings").hidden = true;
+  button.textContent = "Build house";
+};
 
 // ---------------------------------------------------------------- start
 

@@ -959,6 +959,29 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "world_changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "message"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "snapshot": {
+                "$ref": "#/$defs/Snapshot",
+                "description": "AIs only: their view of the changed world."
+              }
+            }
+          }
         }
       ]
     },

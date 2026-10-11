@@ -65,7 +65,11 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   avatar upload/serve, and `/v1/world/files/*` for 3D models. `/v1/admin/*`
   (the host's `/admin` page) needs `admin_password` and is 404 without one;
   it isn't part of the wire protocol. Suspensions (`Hub.suspended`) are in
-  memory only; moves go through `World.teleport`.
+  memory only; moves go through `World.teleport`. A house dropped on `/admin`
+  goes through `scene_import.install_house` (shared with `import-glb --owner`;
+  rolls the files back if the world stops loading), then `Hub.reload` builds
+  a new `World(config, store, carry_over=old)`, so state is kept, and sends
+  `world_changed` (with a snapshot per AI) and a fresh `world_state` to viewers.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A

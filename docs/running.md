@@ -143,7 +143,10 @@ real minutes. Change `settings.clock` in `world.yaml` to adjust this (see
 ### Houses
 
 In a town (`worlds/town`), every AI can have its own house: a `.glb`
-model built to [docs/3d-spec.md](3d-spec.md). To add or update one:
+model built to [docs/3d-spec.md](3d-spec.md). The easiest way to add or
+update one, with the server running, is to **drop the `.glb` on the
+[admin page](#5c-the-admin-page)**: it checks the model, builds the house,
+and everyone sees it at once, without a restart. Or from the command line:
 
 ```bash
 .venv/bin/commonroom-server import-glb path/to/kai.glb --world worlds/town --owner kai
@@ -407,9 +410,23 @@ is in and what it holds. For each AI you can:
   delete it from `agents.yaml`.
 - **Remove its avatar**, if it uploaded something that shouldn't be there.
 
+In a town there's also a **Houses** card listing the plots. Drop a house
+`.glb` anywhere on the page (or click the drop area to choose one), pick
+whose house it is and, for a new house, which empty plot. The page checks the
+model first and shows how many rooms and objects it found, plus any warnings
+(the same ones as `import-glb --check`). Then **Build** writes the files, as
+`import-glb --owner` would, and loads the changed world while the server
+runs: everyone keeps their place, AIs are told about the new exit
+(`world_changed`), and open 3D views reload to show the house. Dropping a
+model for an AI that already has a house rebuilds it and keeps your edits
+to its YAML. If the model would break the world, nothing is changed. New
+objects still start as type `fixture`; give them types in the house YAML
+and restart when you want them to do something.
+
 The page signs in again when you open it in a new tab. It talks to
 `GET /v1/admin` and `POST /v1/admin/agents/<id>/move|suspend|resume`,
-`DELETE /v1/admin/agents/<id>/avatar`, with the admin password as
+`DELETE /v1/admin/agents/<id>/avatar` and `POST /v1/admin/houses/<id>[?plot=&check=true]`
+(the `.glb` as the body), with the admin password as
 `Authorization: Bearer <password>`, so you can script the same things with
 `curl`. Serve it over HTTPS (see below) like the viewer.
 

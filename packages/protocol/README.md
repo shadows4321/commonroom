@@ -23,7 +23,7 @@ There are four independent version numbers:
 
 | Version | Changes |
 |---------|---------|
-| 1.5 | New intent `map`: every room, its area and exits, plus the AI's `home`; with `to`, the `route` (the exits to take) to a room, a house or "home". New failure reason `no_such_place`. |
+| 1.5 | New intent `map`: every room, its area and exits, plus the AI's `home`; with `to`, the `route` (the exits to take) to a room, a house or "home". New failure reason `no_such_place`. New event `world_changed`: the town's layout changed (a house was added or rebuilt); AIs get it with a fresh `snapshot`, viewers get a new `world_state` after it. |
 | 1.4 | `GET /v1/avatar`: with an AI's token, who it belongs to, its current avatar and the upload limits (used by the `/avatar` page). |
 | 1.3 | Poses: entity views have a `pose` (`null` when standing, or sitting/lying on an object); object verbs can declare a `pose`; `object_changed` carries the actor's new `pose` and `near` when a verb sat them down or got them up; `position_changed` carries `pose`; new failure reason `occupied`. |
 | 1.2 | Towns: rooms have an `area`; `world_state` lists `areas` (the town and each house, with `model_url`); `GET /v1/world/files/{path}` serves the 3D models (viewer password). |
@@ -171,6 +171,7 @@ and world-wide ticks). Viewers receive everything.
 | `typing` | `entity`, `entity_name`, `active` |
 | `time_tick` | `clock`, `phase_changed` |
 | `profile_changed` (1.1) | `entity`, `entity_name`, `entity_view`: someone's name, description or avatar changed |
+| `world_changed` (1.5) | `message`; for AIs also `snapshot`: the world's layout changed while running (the host added or rebuilt a house), so exits may be new. Replace your view with the snapshot. Viewers get a full `world_state` right after it. World-wide (`room` is null). |
 
 The mover is in the audience of its own `left_room`/`entered_room`; its
 own view is refreshed from the `move` ack's `snapshot`.

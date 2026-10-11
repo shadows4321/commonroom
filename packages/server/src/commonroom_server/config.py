@@ -121,6 +121,7 @@ class WorldConfig:
     settings: Settings
     areas: dict[str, Area] = field(default_factory=dict)
     homes: dict[str, str] = field(default_factory=dict)  # agent id -> the room it starts in
+    plots: dict[str, str | None] = field(default_factory=dict)  # town plot -> its street room
     world_dir: Path | None = None
 
 
@@ -430,7 +431,8 @@ def load_world(world_dir: str | Path) -> WorldConfig:
     if settings.start_room not in rooms:
         raise ConfigError(f"start_room {settings.start_room!r} is not a room")
     return WorldConfig(name=raw.get("name", world_dir.name), rooms=rooms, types=types, objects=objects,
-                       settings=settings, areas=areas, homes=homes, world_dir=world_dir)
+                       settings=settings, areas=areas, homes=homes, world_dir=world_dir,
+                       plots={str(k): (v or {}).get("street") for k, v in (raw.get("plots") or {}).items()})
 
 
 def load_agents(path: str | Path) -> AgentsConfig:

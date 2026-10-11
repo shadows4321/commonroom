@@ -1,4 +1,6 @@
 import dataclasses
+import shutil
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,7 +8,9 @@ from starlette.websockets import WebSocketDisconnect
 
 from commonroom_protocol import API_PREFIX, PROTOCOL_VERSION
 from commonroom_server.app import DEFAULT_VIEWER_DIR, create_app
-from commonroom_server.config import ConfigError, load_agents
+from test_schema import validate
+
+from commonroom_server.config import AgentsConfig, AgentSpec, ConfigError, load_agents, load_world
 
 ADMIN = f"{API_PREFIX}/admin"
 AUTH = {"Authorization": "Bearer host-secret"}
@@ -115,3 +119,100 @@ def test_set_admin_password_cli(tmp_path):
     main(["set-admin-password", "the-host-pass", "--world", str(tmp_path)])
     cfg = load_agents(tmp_path / "agents.yaml")
     assert cfg.admin_password == "the-host-pass" and cfg.viewer_password == "viewer-pass"
+
+
+# ------------------------------------------------------------- houses
+
+TOWN = Path(__file__).resolve().parents[3] / "worlds" / "town"
+TOWN_AGENTS = AgentsConfig(agents={
+    "mia": AgentSpec("mia", "Mia", "tok-mia"),
+    "otto": AgentSpec("otto", "Otto", "tok-otto"),
+    "kai": AgentSpec("kai", "Kai", "tok-kai"),
+}, viewer_password="open-sesame", admin_password="host-secret")
+
+
+@pytest.fixture
+def town_dir(tmp_path):
+    target = tmp_path / "town"
+    shutil.copytree(TOWN, target)
+    return target
+
+
+def town_client(town_dir):
+    return TestClient(create_app(load_world(town_dir), TOWN_AGENTS, viewer_dir=None, clock_interval=0,
+                                 avatars_dir=town_dir / "avatars"))
+
+
+def build(client, owner, data, **query):
+    return client.post(f"{ADMIN}/houses/{owner}", content=data, params=query, headers=AUTH)
+
+
+def until(ws, kind):
+    while (msg := ws.receive_json())["type"] != kind:
+        pass
+    return msg
+
+
+def test_building_a_house_from_the_admin_page(town_dir, tmp_path):
+    model = (TOWN / "houses" / "otto.glb").read_bytes()
+    world_yaml = (town_dir / "world.yaml").read_text()
+    with town_client(town_dir) as client, \
+            client.websocket_connect(f"{API_PREFIX}/ws") as kai, \
+            client.websocket_connect(f"{API_PREFIX}/ws/viewer?token=open-sesame") as viewer:
+        assert register(kai, "tok-kai")["snapshot"]["room"]["id"] == "square"  # no house yet
+        assert viewer.receive_json()["type"] == "world_state"
+        kai.send_json({"type": "move", "id": "m", "to": "street_west"})
+        until(kai, "ack")
+        status = client.get(ADMIN, headers=AUTH).json()
+        assert status["can_add_houses"] and {p["id"]: p["owner"] for p in status["plots"]}["3"] is None
+
+        checked = build(client, "kai", model, check="true").json()["house"]
+        assert checked == {"owner": "kai", "plot": "3", "rooms": 4, "objects": 8, "new": True,
+                           "warnings": [], "written": False}
+        assert (town_dir / "world.yaml").read_text() == world_yaml and not (town_dir / "houses" / "kai.glb").exists()
+
+        res = build(client, "kai", model)
+        assert res.status_code == 200, res.text
+        assert res.json()["house"]["written"] and res.json()["status"]["counts"]["rooms"] == 16
+        changed = until(kai, "world_changed")
+        validate(changed)
+        assert changed["message"] == "Kai's house has been built." and changed["room"] is None
+        assert {"direction": "Kai's house", "to": "kai.garden", "to_name": "Kai's Garden"} in \
+            changed["snapshot"]["room"]["exits"]
+        state = until(viewer, "world_state")
+        validate(state)
+        area = next(a for a in state["areas"] if a["id"] == "kai")
+        assert area["plot"] == "3" and client.get(area["model_url"], headers={"Authorization": "Bearer open-sesame"}
+                                                  ).content == model
+        assert any(e["type"] == "world_changed" for e in state["recent_events"])
+        kai.send_json({"type": "move", "id": "home", "to": "Kai's house"})
+        assert until(kai, "ack")["result"]["room"] == "kai.garden"
+
+        rebuilt = build(client, "kai", model).json()["house"]
+        assert rebuilt["new"] is False and rebuilt["plot"] == "3"
+        assert until(kai, "world_changed")["message"] == "Kai's house has been rebuilt."
+        world = client.app.state.hub.world  # people carried over both reloads, still connected
+        assert world.entities["kai"].room == "kai.garden" and world.entities["kai"].online
+    assert load_world(town_dir).homes["kai"] == "kai.garden"  # and it's on disk for the next start
+
+
+def test_a_bad_house_changes_nothing(town_dir, tmp_path):
+    world_yaml = (town_dir / "world.yaml").read_text()
+    model = (TOWN / "houses" / "otto.glb").read_bytes()
+    with town_client(town_dir) as client:
+        res = build(client, "kai", b"not a model")
+        assert res.status_code == 422 and res.json()["reason"] == "bad_model" and "glTF Binary" in res.json()["message"]
+        assert build(client, "kai", model, plot="1").json()["message"] == "plot 1 already has a house"
+        assert build(client, "kai", model, plot="9").status_code == 422
+        assert build(client, "nobody", model).status_code == 404
+        assert build(client, "kai", b"").status_code == 400
+        assert client.post(f"{ADMIN}/houses/kai", content=model).status_code == 401
+        assert client.get(ADMIN, headers=AUTH).json()["counts"]["rooms"] == 12
+    assert (town_dir / "world.yaml").read_text() == world_yaml
+    assert not (town_dir / "houses" / "kai.glb").exists() and not (town_dir / "houses" / "kai.yaml").exists()
+
+
+def test_houses_need_a_town(client):
+    status = client.get(ADMIN, headers=AUTH).json()
+    assert status["can_add_houses"] is False and status["plots"] == []
+    assert client.post(f"{ADMIN}/houses/mia", content=b"glTF", headers=AUTH).status_code == 409

@@ -73,6 +73,9 @@ Model them in Blender following [docs/3d-spec.md](docs/3d-spec.md), then:
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
 ```
 
+Once the town is running, you can also add a house by dropping its `.glb`
+on the host's `/admin` page; it appears without a restart.
+
 Copy `objects.yaml` and `agents.example.yaml` (as `agents.yaml`) from
 `worlds/town` into the new folder first. The full steps are in
 [docs/running.md](docs/running.md#your-own-town).

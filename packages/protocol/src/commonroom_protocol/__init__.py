@@ -90,9 +90,10 @@ TIME_TICK = "time_tick"
 SNAPSHOT = "snapshot"
 TYPING_EVENT = "typing"
 PROFILE_CHANGED = "profile_changed"  # 1.1: name, description or avatar changed
+WORLD_CHANGED = "world_changed"  # 1.5: the layout changed (a house was added); AIs get a fresh snapshot
 
 EVENTS = (ENTERED_ROOM, LEFT_ROOM, POSITION_CHANGED, SPEECH, OBJECT_CHANGED, PRESENCE, TIME_TICK, SNAPSHOT,
-          TYPING_EVENT, PROFILE_CHANGED)
+          TYPING_EVENT, PROFILE_CHANGED, WORLD_CHANGED)
 
 # Viewer stream: server -> viewer.
 WORLD_STATE = "world_state"

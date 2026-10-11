@@ -32,3 +32,17 @@ button.small-btn.danger { color: var(--shout); }
 button.small-btn:disabled { opacity: .45; cursor: default; }
 .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 @media (max-width: 600px) { .admin-page .clock { display: none; } }
+
+.plots { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.plots li { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.plots li .sub { color: var(--muted); font-size: 12px; }
+.plots li.free { border-style: dashed; color: var(--muted); }
+.house-form { display: flex; gap: 12px; flex-wrap: wrap; }
+.house-form label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.house-form select {
+  font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink); max-width: 220px;
+}
+.warnings { margin: 0; padding-left: 18px; font-size: 13px; color: var(--shout); }
+.warnings[hidden] { display: none; }
+body.dragging .drop { border-color: var(--accent); background: var(--room-active); }

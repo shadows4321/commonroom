@@ -22,7 +22,8 @@ from commonroom_protocol import (
 
 from . import avatars
 from .avatars import AvatarError, AvatarLimits, AvatarStore
-from .config import AgentsConfig, AgentSpec, WorldConfig
+from .config import AgentsConfig, AgentSpec, ConfigError, WorldConfig, load_world
+from .scene_import import ImportProblem, install_house
 from .store import Store
 from .world import Batch, Failure, World
 
@@ -30,6 +31,7 @@ log = logging.getLogger("commonroom")
 
 DEFAULT_VIEWER_DIR = Path(__file__).resolve().parents[3] / "viewer"
 REGISTER_TIMEOUT = 10.0
+MAX_HOUSE_BYTES = 100 * 1024 * 1024  # a house .glb uploaded on /admin
 AUTH_FAILURE_DELAY = 1.0  # seconds; slows down password guessing
 
 try:
@@ -131,6 +133,29 @@ class Hub:
             }
             for conn in self.viewers:
                 conn.send(update)
+
+    def reload(self, config: WorldConfig, message: str) -> None:
+        """Switch to a changed world config (a house was added) without a restart. People,
+        objects and the clock carry over; AIs get the change with a fresh snapshot of their
+        own, and viewers get a new world_state."""
+        self.dispatch(self.world.commit())
+        world = World(config, self.world.store, carry_over=self.world)
+        for eid in self.agent_conns:
+            if eid in world.entities:
+                world.entities[eid].online = True
+        changed = world.world_changed(message)
+        batch = world.commit()
+        self.world = world
+        for ev in batch.events:
+            for eid, conn in self.agent_conns.items():
+                if ev is changed:
+                    conn.send({**ev.to_wire(eid), "snapshot": world.snapshot(eid)})
+                elif ev.visible_to(eid):
+                    conn.send(ev.to_wire(eid))
+        state = {"type": WORLD_STATE, "protocol": PROTOCOL_VERSION, "server_version": SERVER_VERSION,
+                 **world.world_state()}
+        for conn in self.viewers:
+            conn.send(state)
 
     async def clock_loop(self, interval: float) -> None:
         last = time.monotonic()
@@ -399,6 +424,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             "public_viewer": hub.agents.viewer_password is None,
             "persistent": store is not None,
             "counts": {"rooms": len(world.rooms), "objects": len(world.objects), "people": len(world.entities)},
+            "can_add_houses": world.config.world_dir is not None and bool(world.config.plots),
+            "plots": [{"id": pid, "street": street, "street_name": world.rooms[street].name if street in world.rooms else None,
+                       "owner": next((a.owner for a in world.config.areas.values() if a.plot == pid), None)}
+                      for pid, street in world.config.plots.items()],
             "rooms": [{"id": r.id, "name": r.name, "area": r.area} for r in world.rooms.values()],
             "agents": people,
         }
@@ -457,14 +486,53 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         log.info("admin removed %s's avatar", spec.id)
         return admin_status()
 
-    # 3D models named in the world config, and nothing else from the world directory.
-    world_dir = world_config.world_dir.resolve() if world_config.world_dir else None
-    world_files = {a.model.relative_to(world_dir).as_posix(): a.model
-                   for a in world_config.areas.values() if a.model is not None and world_dir is not None}
+    house_lock = asyncio.Lock()
+
+    @app.post(f"{API_PREFIX}/admin/houses/{{owner}}")
+    async def admin_house(request: Request, owner: str, plot: str | None = Query(default=None),
+                          check: bool = Query(default=False)):
+        """Add (or rebuild) an AI's house from a .glb in the request body, then load the changed
+        world without a restart. ?plot= picks the plot for a new house; ?check=true only reports."""
+        await require_admin(request)
+        spec = admin_agent(owner)
+        world_dir = hub.world.config.world_dir
+        if world_dir is None or not hub.world.config.plots:
+            return _problem(409, "not_a_town", "This world has no plots for houses: import a town model first.")
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_HOUSE_BYTES:
+                return _problem(413, "too_large", f"House models can be at most {MAX_HOUSE_BYTES // (1024 * 1024)} MB.")
+        if not body:
+            return _problem(400, "bad_request", "Send the house .glb as the request body.")
+        async with house_lock:
+            with tempfile.TemporaryDirectory(prefix="commonroom-house-") as tmp:
+                glb = Path(tmp) / "house.glb"
+                glb.write_bytes(bytes(body))
+                try:
+                    house = await asyncio.to_thread(install_house, world_dir, glb, spec.id, plot, not check)
+                except ImportProblem as exc:
+                    return _problem(422, "bad_model", str(exc))
+            if not check:
+                try:
+                    config = await asyncio.to_thread(load_world, world_dir)
+                except ConfigError as exc:  # changed on disk by hand meanwhile; the files are fine, so say so
+                    return _problem(500, "reload_failed", f"The house was saved, but the world didn't reload: {exc}")
+                name = hub.world.entities[spec.id].name if spec.id in hub.world.entities else spec.name
+                hub.reload(config, f"{name}'s house has been built." if house.new else f"{name}'s house has been rebuilt.")
+                log.info("admin %s %s's house on plot %s", "added" if house.new else "rebuilt", spec.id, house.plot)
+        return {"house": {"owner": house.owner, "plot": house.plot, "rooms": house.rooms, "objects": house.objects,
+                          "new": house.new, "warnings": house.warnings, "written": house.written},
+                "status": admin_status()}
 
     @app.get(f"{API_PREFIX}/world/files/{{path:path}}")
     async def world_file(request: Request, path: str, token: str | None = Query(default=None)):
         await require_viewer(request, token)
+        # 3D models named in the world config, and nothing else from the world directory.
+        config = hub.world.config
+        world_dir = config.world_dir.resolve() if config.world_dir else None
+        world_files = {a.model.resolve().relative_to(world_dir).as_posix(): a.model
+                       for a in config.areas.values() if a.model is not None and world_dir is not None}
         file = world_files.get(path)
         if file is None or not file.is_file():
             raise HTTPException(404, "no such world file")

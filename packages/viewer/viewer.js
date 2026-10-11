@@ -220,7 +220,8 @@
       const name = el("span", state.typing.has(e.id) ? "typing" : null, e.name);
       chip.append(avatar, name);
       const bits = [];
-      if (e.near) bits.push(`by ${e.near.name}`);
+      if (e.pose) bits.push(`${e.pose.kind === "lying" ? "🛏️ lying on" : "🪑 sitting on"} the ${e.pose.name}`); // protocol 1.3
+      else if (e.near) bits.push(`by ${e.near.name}`);
       if (e.holding.length) bits.push(`🤲 ${e.holding.map((h) => h.name).join(", ")}`);
       if (!e.online) bits.push("dozing");
       if (bits.length) chip.append(el("span", "meta", bits.join(" · ")));

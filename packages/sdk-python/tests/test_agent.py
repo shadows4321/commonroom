@@ -90,6 +90,20 @@ async def test_view_tracks_objects_and_people(pair):
     assert not failed and failed.reason == "not_here"
 
 
+async def test_view_tracks_poses(pair):
+    mia, otto = pair
+    assert await mia.move("east")
+    assert await otto.move("east")
+    assert await mia.interact("bench", "lie")
+    await eventually(lambda: (mia.view.me.get("pose") or {}).get("kind") == "lying")
+    await eventually(lambda: otto.view.occupants["mia"].get("pose") is not None)
+    assert "(lying on the bench)" in mia.describe()
+    assert "Mia [mia] (sitting" not in otto.describe() and "(lying on the bench" in otto.describe()
+    assert await mia.move(near="lamp")
+    await eventually(lambda: otto.view.occupants["mia"].get("pose") is None)
+    assert mia.view.me["pose"] is None and "(near the lamp)" in mia.describe()
+
+
 async def test_describe_and_tools(pair):
     mia, _ = pair
     text = mia.describe()

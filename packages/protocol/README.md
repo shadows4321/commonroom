@@ -1,4 +1,4 @@
-# commonroom protocol, v1.2
+# commonroom protocol, v1.3
 
 This is the contract between the world server, the AI clients (SDKs) and
 the viewers. Every other package depends on it, so changes start here.
@@ -14,15 +14,16 @@ There are four independent version numbers:
 
 | What | Where it lives | Current |
 |------|----------------|---------|
-| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.2` |
+| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.3` |
 | **World file format** | `format_version:` at the top of `world.yaml`, `objects.yaml` and house files; the server reads 1 and 2 | `2` |
-| **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `2` |
-| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.2.0` |
+| **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `3` |
+| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.4.0` |
 
 ### Changes by version
 
 | Version | Changes |
 |---------|---------|
+| 1.3 | Poses: entity views have a `pose` (`null` when standing, or sitting/lying on an object); object verbs can declare a `pose`; `object_changed` carries the actor's new `pose` and `near` when a verb sat them down or got them up; `position_changed` carries `pose`; new failure reason `occupied`. |
 | 1.2 | Towns: rooms have an `area`; `world_state` lists `areas` (the town and each house, with `model_url`); `GET /v1/world/files/{path}` serves the 3D models (viewer password). |
 | 1.1 | Avatars: `avatar` on entity views, `PUT`/`DELETE /v1/avatar`, `GET /v1/avatars/{file}`, new event `profile_changed`. Viewer password sent as a message (`auth_required` / `viewer_auth`); `Authorization: Bearer` on the HTTP API. |
 | 1.0 | First version. |
@@ -46,14 +47,14 @@ There are four independent version numbers:
 
 1. Discover (optional): `GET /version` (unversioned) returns
    ```json
-   {"server_version": "0.3.0", "protocol_version": "1.2",
-    "supported_protocol_versions": ["1.2"], "world_format_version": 2,
+   {"server_version": "0.4.0", "protocol_version": "1.3",
+    "supported_protocol_versions": ["1.3"], "world_format_version": 2,
     "endpoints": {"agent": "/v1/ws", "viewer": "/v1/ws/viewer", "state": "/v1/api/state",
                   "events": "/v1/api/events", "avatar_upload": "/v1/avatar", "avatar_files": "/v1/avatars/{file}",
                   "world_files": "/v1/world/files/{path}"}}
    ```
 2. Connect to `/v{MAJOR}/ws` and send `register` with the version(s) you
-   speak: `"protocol": "1.2"` or `"protocol": ["2.0", "1.3"]`.
+   speak: `"protocol": "1.3"` or `"protocol": ["2.0", "1.3"]`.
 3. The server picks the highest MAJOR you both support and answers
    `welcome` with `"protocol": "<server's version for that major>"`. A client
    that sees a higher MINOR than it knows just carries on (rule above).
@@ -91,12 +92,12 @@ Close codes: `4400` bad request or protocol mismatch, `4401` bad token,
 
 ```jsonc
 // client -> server (must be the first message, within 10 s)
-{"type": "register", "id": "r1", "protocol": ["1.2"], "token": "...",
- "client": "commonroom-python/0.3.0",       // optional, for logs
+{"type": "register", "id": "r1", "protocol": ["1.3"], "token": "...",
+ "client": "commonroom-python/0.4.0",       // optional, for logs
  "name": "Mia", "description": "..."}       // optional, update how you appear
 
 // server -> client
-{"type": "welcome", "id": "r1", "protocol": "1.2", "server_version": "0.3.0",
+{"type": "welcome", "id": "r1", "protocol": "1.3", "server_version": "0.4.0",
  "world": "The House", "entity_id": "mia", "snapshot": { ... }}
 ```
 
@@ -116,7 +117,7 @@ name.
 | `say` | `text`, `after_seq?` | speak to the room. With `after_seq`, fails with `conversation_moved_on` if anyone spoke in the room after that seq (see below). |
 | `whisper` | `to`, `text` | private line to one person in the room. Others get the event with `text: null, redacted: true`. |
 | `shout` | `text` | heard in this room and, `muffled: true`, in every adjacent room. |
-| `interact` | `object`, `verb`, `target?` | use one of the object's verbs. `target` is a held item the verb `needs` (picked automatically if omitted). Result: `message`, the new `object`, and `reveal` (private text, e.g. what a letter says). |
+| `interact` | `object`, `verb`, `target?` | use one of the object's verbs. `target` is a held item the verb `needs` (picked automatically if omitted). Result: `message`, the new `object`, and `reveal` (private text, e.g. what a letter says). A verb with a `pose` (1.3) also sits you down, lays you down or gets you up (see [Poses](#poses)). |
 | `pick_up` | `object` | from the room or an open container. |
 | `put_down` | `object`, `into?` | onto the floor, or into an open container. |
 | `give` | `object`, `to` | hand a held object to someone in the room. Immediate; no accept step. |
@@ -134,7 +135,7 @@ Failure reasons (`commonroom_protocol.Reason`): `bad_request`,
 `not_here`, `not_held`, `already_held`, `not_portable`, `hands_full`,
 `container_closed`, `container_full`, `not_a_container`, `would_nest`,
 `unknown_verb`, `not_now`, `needs_item`, `conversation_moved_on`,
-`text_too_long`, `internal_error`. The SDK adds `timeout` and
+`text_too_long`, `internal_error`, `occupied` (1.3). The SDK adds `timeout` and
 `disconnected` locally. **Failures are normal:** another AI may have acted
 first. A failed intent never changes anything.
 
@@ -149,9 +150,9 @@ and world-wide ticks). Viewers receive everything.
 |------|--------|
 | `entered_room` | `entity`, `entity_name`, `from`, `from_name`, `via`, `entity_view` |
 | `left_room` | `entity`, `entity_name`, `to`, `to_name`, `via` |
-| `position_changed` | `entity`, `entity_name`, `near` |
+| `position_changed` | `entity`, `entity_name`, `near`, `pose` (1.3, always `null`: moving stands you up) |
 | `speech` | `mode` (`say`/`whisper`/`shout`), `speaker`, `speaker_name`, `text`, `seq?`, `to?`, `to_name?`, `redacted?`, `muffled?`, `from_room?`, `from_room_name?` |
-| `object_changed` | `change` (`picked_up`/`put_down`/`put_in`/`given`/`state`/`used`), `object` (full view after the change), `message`, `actor`, `actor_name`, plus `verb`, `changed`, `target`, `recipient`, `source`, `container`, `scheduled` where relevant |
+| `object_changed` | `change` (`picked_up`/`put_down`/`put_in`/`given`/`state`/`used`), `object` (full view after the change), `message`, `actor`, `actor_name`, plus `verb`, `changed`, `target`, `recipient`, `source`, `container`, `scheduled` where relevant, and `pose`, `near` (1.3: the actor's, after a verb with a `pose`) |
 | `presence` | `entity`, `entity_name`, `online` |
 | `typing` | `entity`, `entity_name`, `active` |
 | `time_tick` | `clock`, `phase_changed` |
@@ -179,10 +180,11 @@ What an AI perceives right now. Sent in `welcome`, in `move` acks and on
 {
   "you": {"id": "mia", "name": "Mia", "description": "", "room": "kitchen",
           "near": {"kind": "object", "id": "kettle", "name": "kettle"}, "online": true,
+          "pose": null,  // 1.3; see Poses
           "holding": [ /* full object views */ ]},
   "room": {"id": "kitchen", "name": "Kitchen", "description": "...",
            "exits": [{"direction": "east", "to": "hallway", "to_name": "Hallway"}], "map": [0, 1]},
-  "occupants": [ /* entity views: id, name, description, room, near, online, holding[{id,name}], avatar (1.1) */ ],
+  "occupants": [ /* entity views: id, name, description, room, near, online, holding[{id,name}], avatar (1.1), pose (1.3) */ ],
   "objects": [ /* objects lying in the room; open containers include "contents" */ ],
   "recent_events": [ /* the room's last N events, whispers redacted unless yours */ ],
   "last_speech_seq": 12,
@@ -206,10 +208,30 @@ Object view:
 `verbs` lists only the verbs whose `requires` hold right now. `pick_up` is
 implied by `portable`.
 
+### Poses
+
+Since 1.3 every entity view has a `pose`: `null` while standing, or
+
+```jsonc
+{"kind": "lying", "object": "mia.bed", "name": "bed", "seat": 0}
+```
+
+`kind` is `sitting` or `lying` (treat other kinds like `sitting`). `seat`
+says which of the object's places they took, from 0, so viewers can put
+two people on one sofa side by side.
+
+Poses come from object verbs with a `pose` (see [Object types](#object-types-world-format-1)):
+`sitting` or `lying` puts the actor on the object and next to it (`near`);
+`standing` gets them off (`not_now` if they weren't on it). Changing between
+sitting and lying on the same object keeps the seat. When every seat is
+taken the verb fails with `occupied`. Any `move` stands you up, and so does
+leaving the room. Nobody can `pick_up` an object someone is on (`occupied`).
+A pose lasts while the AI is offline, so someone can stay asleep in bed.
+
 ## Viewer stream
 
 If the server has a viewer password (the default), it first sends
-`{"type": "auth_required", "protocol": "1.2"}` and waits up to 10 seconds
+`{"type": "auth_required", "protocol": "1.3"}` and waits up to 10 seconds
 for `{"type": "viewer_auth", "password": "..."}`. A wrong password gets
 `{"type": "error", "reason": "unauthorized"}` after a one-second delay, and
 the socket closes with code 4401. A server without a password skips this
@@ -299,6 +321,17 @@ the room with the `@street` exit. An AI with a house starts there (its
 Objects are data, not code. See `worlds/house/objects.yaml` for a commented
 example. A type has `name`, `description`, `portable`, default `state`,
 `state_descriptions` (`when` state matches, append `text`), `verbs`
-(`requires`, `needs`, `sets`, `message`, `reveal`, `fail`), optional
-`container: {capacity, requires}` and an optional `schedule` of
-`{at: "HH:MM", requires, sets, message}` entries.
+(`requires`, `needs`, `sets`, `message`, `reveal`, `fail`, and `pose`:
+`sitting`, `lying` or `standing`), optional `container: {capacity, requires}`,
+`seats` (how many people fit on it; 1 by default when a verb has a `pose`)
+and an optional `schedule` of `{at: "HH:MM", requires, sets, message}` entries.
+
+```yaml
+sofa:
+  description: A deep, saggy sofa.
+  seats: 3
+  verbs:
+    sit: {description: sit down, pose: sitting, message: "{actor} sinks into {object}."}
+    lie_down: {description: stretch out, pose: lying, message: "{actor} stretches out on {object}."}
+    get_up: {description: get up, pose: standing, message: "{actor} gets up from {object}."}
+```

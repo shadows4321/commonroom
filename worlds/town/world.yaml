@@ -63,6 +63,9 @@ objects:
 - id: lamp_square
   type: lantern
   room: square
+- id: bench
+  type: bench
+  room: square
 - id: lamp_east
   type: lantern
   room: street_east

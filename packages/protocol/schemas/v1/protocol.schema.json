@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.2",
+  "$comment": "protocol_version 1.3",
   "$defs": {
     "id": {
       "type": "string",
@@ -107,6 +107,35 @@
         },
         "name": {
           "type": "string"
+        }
+      }
+    },
+    "Pose": {
+      "description": "1.3: null = standing. Otherwise sitting or lying on an object in the same room; seat is which of its places (0, 1, ...).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "kind",
+        "object",
+        "name",
+        "seat"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "sitting or lying; new kinds may appear in minor versions"
+        },
+        "object": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "seat": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -244,6 +273,9 @@
         },
         "avatar": {
           "$ref": "#/$defs/Avatar"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose"
         }
       }
     },
@@ -765,6 +797,10 @@
             "properties": {
               "near": {
                 "$ref": "#/$defs/Near"
+              },
+              "pose": {
+                "$ref": "#/$defs/Pose",
+                "description": "1.3; moving always stands you up"
               }
             }
           }
@@ -857,6 +893,13 @@
               },
               "scheduled": {
                 "type": "boolean"
+              },
+              "pose": {
+                "$ref": "#/$defs/Pose",
+                "description": "1.3: present when the verb sat the actor down, laid them down or got them up"
+              },
+              "near": {
+                "$ref": "#/$defs/Near"
               }
             }
           }

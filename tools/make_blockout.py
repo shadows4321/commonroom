@@ -184,6 +184,13 @@ def town() -> list[N]:
         N("spot:fountain", (0, -0.5, 0)),
         N("spawn:square", (-8, -6, 0)), N("spawn:square", (8, -6, 0)), N("spawn:square", (8, 8, 0)),
         street_lamp("lamp_square", -12, 10),
+        N("obj:bench", (-6, 8, 0)).add(
+            N("bench_seat", (0, 0, 0.42), box=(2.4, 0.6, 0.06), color=WOOD),
+            N("bench_back", (0, 0.27, 0.75), box=(2.4, 0.06, 0.5), color=WOOD),
+            N("bench_legs", (0, 0, 0.2), box=(2.2, 0.5, 0.4), color=(0.2, 0.2, 0.22)),
+        ),
+        *[N("seat:bench" + suffix, (x, 7.95, 0.45)) for x, suffix in ((-6.8, ""), (-6, ".001"), (-5.2, ".002"))],
+        N("spot:bench", (-6, 7, 0)),
     )
     street_east = N("room:street_east", (40, 0, 0)).add(
         N("floor:street_east", (0, 0, -0.02), box=(40, 8, 0.04), color=ROAD),
@@ -219,7 +226,7 @@ def town() -> list[N]:
 # ------------------------------------------------------------- a template house
 
 def house(colour: tuple[float, float, float]) -> list[N]:
-    """A two-room cottage with a front garden. Front faces -Y; origin = plot centre."""
+    """A three-room cottage with a front garden. Front faces -Y; origin = plot centre."""
     h = 2.8
     garden = N("room:garden").add(
         N("floor:garden", (0, -5, -0.01), box=(16, 6, 0.04), color=GRASS),
@@ -233,33 +240,61 @@ def house(colour: tuple[float, float, float]) -> list[N]:
         N("obj:rose_bush", (-4, -5, 0)).add(N("bush", (0, 0, 0.4), box=(1, 1, 0.8), color=(0.3, 0.45, 0.25))),
         N("spot:rose_bush", (-3, -5.2, 0)),
     )
-    # Living room x -6..1, kitchen x 1..6; the front door (x -0.5..0.5) opens into the living room.
+    # Living room x -6..1 y -2..3, bedroom behind it (y 3..6), kitchen x 1..6. The front door
+    # (x -0.5..0.5) opens into the living room.
     walls = [N("wall:living_room", (-3.35, -2, h / 2), box=(5.5, 0.2, h), color=colour),
              N("wall:kitchen", (3.35, -2, h / 2), box=(5.5, 0.2, h), color=colour),
-             N("wall:living_room", (-6, 2, h / 2), box=(0.2, 8, h), color=colour),
+             N("wall:living_room", (-6, 0.5, h / 2), box=(0.2, 5, h), color=colour),
+             N("wall:bedroom", (-6, 4.5, h / 2), box=(0.2, 3, h), color=colour),
              N("wall:kitchen", (6, 2, h / 2), box=(0.2, 8, h), color=colour),
-             N("wall:living_room", (-2.5, 6, h / 2), box=(7, 0.2, h), color=colour),
+             N("wall:bedroom", (-2.5, 6, h / 2), box=(7, 0.2, h), color=colour),
              N("wall:kitchen", (3.5, 6, h / 2), box=(5, 0.2, h), color=colour),
-             N("wall:kitchen", (1, 1, h / 2), box=(0.2, 6, h), color=colour)]
+             N("wall:bedroom", (-4, 3, h / 2), box=(4, 0.2, h), color=colour),
+             N("wall:bedroom", (0, 3, h / 2), box=(2, 0.2, h), color=colour),
+             N("wall:kitchen", (1, -1, h / 2), box=(0.2, 2, h), color=colour),
+             N("wall:kitchen", (1, 3.5, h / 2), box=(0.2, 5, h), color=colour)]
     living = N("room:living_room").add(
-        N("floor:living_room", (-2.5, 2, 0.01), box=(7, 8, 0.04), color=(0.62, 0.48, 0.34)),
+        N("floor:living_room", (-2.5, 0.5, 0.01), box=(7, 5, 0.04), color=(0.62, 0.48, 0.34)),
         N("exit:living_room:garden", (0, -1.3, 0)),
-        N("exit:living_room:kitchen", (0.4, 4.8, 0)),
-        N("ceiling:living_room", (-2.5, 2, h + 0.05), box=(7, 8, 0.1), color=WALL),
-        N("sofa", (-3.5, 4.6, 0.4), box=(3, 1, 0.8), color=(0.35, 0.45, 0.65)),
-        N("obj:lamp", (-5.2, 4.8, 0)).add(
+        N("exit:living_room:kitchen", (0.5, 0.5, 0)),
+        N("exit:living_room:bedroom", (-1.5, 2.6, 0)),
+        N("ceiling:living_room", (-2.5, 0.5, h + 0.05), box=(7, 5, 0.1), color=WALL),
+        N("obj:sofa", (-3.5, 2.4, 0)).add(
+            N("sofa_base", (0, 0, 0.225), box=(2.4, 0.9, 0.45), color=(0.35, 0.45, 0.65)),
+            N("sofa_back", (0, 0.35, 0.65), box=(2.4, 0.2, 0.5), color=(0.35, 0.45, 0.65)),
+        ),
+        # Where people sit: hips on the seat, facing the marker's -Y (here: into the room).
+        *[N("seat:sofa" + suffix, (x, 2.3, 0.45)) for x, suffix in ((-4.3, ""), (-3.5, ".001"), (-2.7, ".002"))],
+        N("spot:sofa", (-3.5, 1.5, 0)),
+        N("obj:lamp", (-5.4, 2.4, 0)).add(
             N("lamp_stand", (0, 0, 0.75), box=(0.1, 0.1, 1.5), color=(0.2, 0.2, 0.2)),
             N("lamp_shade", (0, 0, 1.55), box=(0.45, 0.45, 0.35), color=(0.9, 0.85, 0.7)),
             N("when:on=true", (0, 0, 1.4)).add(N("lamp_light", light=(1.0, 0.85, 0.6, 12))),
         ),
-        N("spot:lamp", (-4.5, 4.1, 0)),
-        N("obj:bookshelf", (-5.6, 1, 0)).add(N("shelf", (0, 0, 1), box=(0.5, 2, 2), color=WOOD)),
-        N("spawn:living_room", (-2.5, 1, 0)), N("spawn:living_room", (-3.5, 2.5, 0)),
+        N("spot:lamp", (-5.0, 1.5, 0)),
+        N("obj:bookshelf", (-5.6, 0, 0)).add(N("shelf", (0, 0, 1), box=(0.5, 2, 2), color=WOOD)),
+        N("spawn:living_room", (-2.5, 0.2, 0)), N("spawn:living_room", (-3.5, -0.8, 0)),
         *[w for w in walls if w.name == "wall:living_room"],
+    )
+    bedroom = N("room:bedroom").add(
+        N("floor:bedroom", (-2.5, 4.5, 0.01), box=(7, 3, 0.04), color=(0.55, 0.42, 0.3)),
+        N("exit:bedroom:living_room", (-1.5, 3.4, 0)),
+        N("ceiling:bedroom", (-2.5, 4.5, h + 0.05), box=(7, 3, 0.1), color=WALL),
+        N("obj:bed", (-4.9, 4.6, 0)).add(
+            N("bed_base", (0, 0, 0.25), box=(2, 1.4, 0.5), color=(0.92, 0.9, 0.86)),
+            N("quilt", (0.25, 0, 0.51), box=(1.5, 1.42, 0.04), color=(0.75, 0.4, 0.35)),
+            N("pillow", (-0.7, 0, 0.56), box=(0.4, 1.2, 0.12), color=(1, 1, 1)),
+            N("headboard", (-0.95, 0, 0.5), box=(0.1, 1.4, 1.0), color=WOOD),
+        ),
+        # Lying down: hips here, head towards the marker's +Y, so turn it to face the foot of the bed.
+        N("seat:bed", (-4.9, 4.25, 0.5), rot_z=90), N("seat:bed.001", (-4.9, 4.95, 0.5), rot_z=90),
+        N("spot:bed", (-3.4, 4.6, 0)),
+        N("spawn:bedroom", (-1.5, 4.6, 0)),
+        *[w for w in walls if w.name == "wall:bedroom"],
     )
     kitchen = N("room:kitchen").add(
         N("floor:kitchen", (3.5, 2, 0.01), box=(5, 8, 0.04), color=(0.8, 0.8, 0.78)),
-        N("exit:kitchen:living_room", (1.6, 4.8, 0)),
+        N("exit:kitchen:living_room", (1.6, 0.5, 0)),
         N("ceiling:kitchen", (3.5, 2, h + 0.05), box=(5, 8, 0.1), color=WALL),
         N("counter", (5.4, 2, 0.45), box=(1, 5, 0.9), color=WOOD),
         N("obj:kettle", (5.4, 1, 0.9)).add(
@@ -276,7 +311,7 @@ def house(colour: tuple[float, float, float]) -> list[N]:
     windows = [N("time:evening+night", (x, -2.12, 1.5), box=(1.2, 0.05, 0.9), color=WARM, emissive=WARM)
                for x in (-3.5, 3.5)]
     roof = N("ext:roof", (0, 2, h + 0.4), box=(12.6, 8.6, 0.8), color=(0.55, 0.2, 0.18))
-    return [garden, living, kitchen, *windows, roof]
+    return [garden, living, bedroom, kitchen, *windows, roof]
 
 
 HOUSES = {"mia": (0.85, 0.72, 0.78), "otto": (0.7, 0.8, 0.9)}

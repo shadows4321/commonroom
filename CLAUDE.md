@@ -23,7 +23,7 @@ cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_world.py
 cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_town.py -k round_trip
 
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db   # any world
-.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id>] for a house
+.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id>] for a house, [--check] to only lint
 ```
 
 There is no linter or formatter configured. CI (`.github/workflows/ci.yml`)
@@ -73,9 +73,14 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
 - `scene_import.py`: reads named markers (`room:`, `exit:`, `obj:`, `plot:`,
   `gate:`, …, see `docs/3d-spec.md`) from a `.glb` and merges them into YAML,
   keeping hand-edited names, types and state. Exits pair up by distance (≤ 3 m).
+  `_check` lints names (`when:` keys vs the type's state, stray `spot:`/`seat:`,
+  light strength); `import-glb --check` prints those warnings and writes nothing.
 - `avatars.py`: validates uploaded VRM/GLB/PNG (structure, self-contained,
   size, texture and vertex limits) and stores them by SHA-256.
-- Objects are data: types (verbs with `requires`/`needs`/`sets`,
+- Poses: a verb with `pose: sitting|lying|standing` puts the actor on (or off)
+  the object. `Entity.pose` holds `{kind, object, seat}`; any `move` clears it.
+  The 3D viewer places people on `seat:<obj>` markers and bends the VRM bones.
+- Objects are data: types (verbs with `requires`/`needs`/`sets`/`pose`,
   containers, schedules) come from `objects.yaml`. `fixture` is a built-in type,
   because `import-glb` assigns it to new objects.
 
@@ -93,7 +98,7 @@ shown (`describe()` / `mark_heard()`), not the newest speech received.
 ## 3D viewer (`packages/viewer/town3d.js`)
 
 It renders the viewer stream using the **object names** in the town and
-house models: floors, exits, spots, spawns, plots and gates for placement;
+house models: floors, exits, spots, seats, spawns, plots and gates for placement;
 `when:` parts for object state; `time:` parts for time of day;
 `ext:`/`ceiling:`/`wall:` for cutaway. three.js's GLTFLoader strips `:` and
 `.` from names, so always read `node.userData.name`.

@@ -8,11 +8,12 @@ from pathlib import Path
 
 from .world import Batch, Entity, Event, Obj
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Each step upgrades a database from version N to N + 1.
 MIGRATIONS = {
     1: ["ALTER TABLE entities ADD COLUMN avatar TEXT"],  # avatars (protocol 1.1)
+    2: ["ALTER TABLE entities ADD COLUMN pose TEXT"],  # sitting and lying (protocol 1.3)
 }
 
 SCHEMA = """
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS entities (
     description TEXT NOT NULL,
     room TEXT NOT NULL,
     near TEXT,
-    avatar TEXT
+    avatar TEXT,
+    pose TEXT
 );
 CREATE TABLE IF NOT EXISTS objects (
     id TEXT PRIMARY KEY,
@@ -89,8 +91,8 @@ class Store:
         if clock is None:
             return None
         entities = [Entity(id=r[0], name=r[1], description=r[2], room=r[3], near=r[4],
-                           avatar=json.loads(r[5]) if r[5] else None)
-                    for r in self.db.execute("SELECT id, name, description, room, near, avatar FROM entities")]
+                           avatar=json.loads(r[5]) if r[5] else None, pose=json.loads(r[6]) if r[6] else None)
+                    for r in self.db.execute("SELECT id, name, description, room, near, avatar, pose FROM entities")]
         objects = [Obj(id=r[0], type=r[1], loc_kind=r[2], loc_id=r[3], state=json.loads(r[4]),
                        name=r[5], description=r[6])
                    for r in self.db.execute("SELECT id, type, loc_kind, loc_id, state, name, description FROM objects")]
@@ -114,10 +116,12 @@ class Store:
         with self.db:
             for e in batch.entities.values():
                 self.db.execute(
-                    "INSERT INTO entities (id, name, description, room, near, avatar) VALUES (?, ?, ?, ?, ?, ?) "
+                    "INSERT INTO entities (id, name, description, room, near, avatar, pose) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT (id) DO UPDATE SET name = excluded.name, description = excluded.description, "
-                    "room = excluded.room, near = excluded.near, avatar = excluded.avatar",
-                    (e.id, e.name, e.description, e.room, e.near, json.dumps(e.avatar) if e.avatar else None))
+                    "room = excluded.room, near = excluded.near, avatar = excluded.avatar, pose = excluded.pose",
+                    (e.id, e.name, e.description, e.room, e.near, json.dumps(e.avatar) if e.avatar else None,
+                     json.dumps(e.pose) if e.pose else None))
             for o in batch.objects.values():
                 self.db.execute(
                     "INSERT INTO objects (id, type, loc_kind, loc_id, state, name, description) "

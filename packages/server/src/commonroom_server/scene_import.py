@@ -19,6 +19,10 @@ from .config import STREET
 
 PAIR_DISTANCE = 3.0  # metres: the two exit markers of one doorway must be at most this far apart
 STAIRS = {"upstairs": "downstairs", "downstairs": "upstairs"}
+MAX_CANDELA = 60.0  # brighter local lights wash out the viewer (its sun runs from 0.12 to 2.8)
+PREFIXES = {"room", "floor", "wall", "ceiling", "ext", "exit", "obj", "when", "time", "spot", "seat", "spawn",
+            "camera", "plot", "gate"}
+PHASES = {"night", "dawn", "morning", "afternoon", "evening"}
 _SUFFIX = re.compile(r"\.\d{3,}$")
 
 
@@ -33,6 +37,8 @@ class Node:
     args: list[str]  # the rest, split on ':'
     position: tuple[float, float, float]  # world space, glTF axes (Y up)
     room: str | None  # nearest room:<id> ancestor
+    obj: str | None = None  # nearest obj:<id> ancestor (not counting the node itself)
+    light: float | None = None  # intensity of a point or spot light on this node (candela)
 
 
 @dataclass
@@ -72,11 +78,12 @@ def read_scene(path: str | Path) -> Scene:
     """All named nodes of a .glb with their world positions and room."""
     doc, _ = _parse_glb(Path(path).read_bytes())
     nodes = doc.get("nodes") or []
+    lights = ((doc.get("extensions") or {}).get("KHR_lights_punctual") or {}).get("lights") or []
     scenes = doc.get("scenes") or [{"nodes": list(range(len(nodes)))}]
     roots = scenes[doc.get("scene", 0)].get("nodes") or []
     out: list[Node] = []
 
-    def visit(index: int, parent: list[float], room: str | None, seen: set[int]) -> None:
+    def visit(index: int, parent: list[float], room: str | None, obj: str | None, seen: set[int]) -> None:
         if index in seen or not 0 <= index < len(nodes):
             return
         seen = seen | {index}
@@ -87,13 +94,20 @@ def read_scene(path: str | Path) -> Scene:
         args = rest.split(":") if kind else []
         if kind == "room" and args:
             room = args[0]
-        out.append(Node(name=name, kind=kind, args=args, position=(world[12], world[13], world[14]), room=room))
+        light = ((node.get("extensions") or {}).get("KHR_lights_punctual") or {}).get("light")
+        intensity = None
+        if isinstance(light, int) and 0 <= light < len(lights) and lights[light].get("type") != "directional":
+            intensity = float(lights[light].get("intensity", 1.0))
+        out.append(Node(name=name, kind=kind, args=args, position=(world[12], world[13], world[14]), room=room,
+                        obj=obj, light=intensity))
+        if kind == "obj" and args:
+            obj = args[0]
         for child in node.get("children") or []:
-            visit(child, world, room, seen)
+            visit(child, world, room, obj, seen)
 
     identity = [1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]
     for root in roots:
-        visit(root, identity, None, set())
+        visit(root, identity, None, None, set())
     return Scene(nodes=out)
 
 
@@ -182,9 +196,89 @@ def _objects(scene: Scene, rooms: dict[str, Node], known_types: set[str]) -> lis
         if room is None and rooms:
             room = min(rooms, key=lambda r: math.dist(rooms[r].position, n.position))
             scene.warnings.append(f"obj:{oid} isn't parented to a room; putting it in {room}")
-        guess = oid if oid in known_types else next((t for t in known_types if oid.endswith(f"_{t}")), "fixture")
-        objects.append({"id": oid, "type": guess, "room": room})
+        objects.append({"id": oid, "type": guess_type(oid, known_types), "room": room})
     return objects
+
+
+def guess_type(oid: str, known_types) -> str:
+    """An object's type from its id: the id itself, or its last words after an underscore, ignoring a
+    trailing number (kettle, big_kettle and kettle_2 are kettles; street_lantern_1 is a lantern)."""
+    base = re.sub(r"_\d+$", "", oid)
+    for candidate in (oid, base):
+        if candidate in known_types:
+            return candidate
+    matches = [t for t in known_types if base.endswith(f"_{t}")]
+    return max(matches, key=len) if matches else "fixture"
+
+
+@dataclass
+class TypeInfo:
+    """What the checks need to know about an object type."""
+    state: set[str]  # every state key it has or sets
+    seats: int = 0
+
+
+def type_info(raw_types: dict) -> dict[str, TypeInfo]:
+    """TypeInfo for each type in an objects.yaml `types:` mapping."""
+    info = {}
+    for tid, raw in (raw_types or {}).items():
+        raw = raw or {}
+        keys = set(raw.get("state") or {})
+        verbs = raw.get("verbs") or {}
+        for v in verbs.values():
+            keys |= set((v or {}).get("sets") or {}) | set((v or {}).get("requires") or {})
+        for d in raw.get("state_descriptions") or []:
+            keys |= set(d.get("when") or {})
+        for entry in raw.get("schedule") or []:
+            keys |= set(entry.get("sets") or {})
+        posed = any((v or {}).get("pose") for v in verbs.values())
+        info[str(tid)] = TypeInfo(state=keys, seats=int(raw.get("seats", 1 if posed else 0)))
+    return info
+
+
+def _check(scene: Scene, objects: list[dict], types) -> None:
+    """Warnings for names the viewer or server will ignore or misread. `types` maps type names to TypeInfo
+    (when it's a plain set of names, the state checks are skipped)."""
+    obj_ids = {o["id"] for o in objects}
+    obj_type = {o["id"]: o.get("type") for o in objects}
+    seats: dict[str, int] = {}
+    for n in scene.nodes:
+        if n.kind and n.kind not in PREFIXES:
+            scene.warnings.append(f"{n.name}: unknown prefix {n.kind + ':'!r}; it's plain scenery")
+        if n.kind == "obj" and n.args and not re.fullmatch(r"[a-z0-9_]+", n.args[0]):
+            scene.warnings.append(f"{n.name}: object ids use lowercase letters, digits and _")
+        if n.kind in ("spot", "seat") and n.args and n.args[0] not in obj_ids:
+            scene.warnings.append(f"{n.name} has no matching obj:{n.args[0]}")
+        if n.kind == "seat" and n.args:
+            seats[n.args[0]] = seats.get(n.args[0], 0) + 1
+        if n.kind == "time":
+            bad = [p for p in ":".join(n.args).split("+") if p not in PHASES]
+            if bad:
+                scene.warnings.append(f"{n.name}: unknown time of day {', '.join(bad)} "
+                                      f"(use {', '.join(sorted(PHASES))})")
+        if n.kind == "when":
+            if n.obj is None:
+                scene.warnings.append(f"{n.name} isn't inside an obj:, so nothing will switch it")
+                continue
+            info = types.get(obj_type.get(n.obj)) if isinstance(types, dict) else None
+            if info is None:
+                continue
+            keys = [part.split("=")[0].strip() for part in ":".join(n.args).split(",")]
+            missing = [k for k in keys if k not in info.state]
+            if missing:
+                known = ", ".join(sorted(info.state)) or "none"
+                scene.warnings.append(f"{n.name} under obj:{n.obj}: type {obj_type[n.obj]!r} has no state "
+                                      f"{', '.join(missing)} (it has: {known}), so this part never shows")
+        if n.light is not None and n.light > MAX_CANDELA:
+            scene.warnings.append(f"{n.name or 'a light'} is {n.light:g} cd; the viewer looks right with about "
+                                  f"10-40 cd for a street lamp and 5-15 cd indoors (Blender: 1 W = 54 cd)")
+    for oid, count in seats.items():
+        info = types.get(obj_type.get(oid)) if isinstance(types, dict) else None
+        if info is not None and not info.seats:
+            scene.warnings.append(f"obj:{oid} has seat: markers, but type {obj_type[oid]!r} has no verb "
+                                  f"with a pose, so nobody can sit there")
+        elif info is not None and count > info.seats:
+            scene.warnings.append(f"obj:{oid} has {count} seat: markers but its type seats {info.seats}")
 
 
 def _merge_rooms(old: dict, rooms: dict[str, Node], exits: dict, maps: dict, warnings: list[str]) -> dict:
@@ -232,7 +326,7 @@ def import_house(glb: str | Path, existing: dict | None, known_types: set[str]) 
         raise ImportProblem(f"a house needs exactly one exit labelled 'out' (found {len(outs)})")
     for n in scene.nodes:
         x, _, z = n.position
-        if n.kind in ("room", "floor", "ext", "wall") and (abs(x) > 8.5 or abs(z) > 8.5):
+        if n.kind in ("room", "floor", "ext", "wall", "obj") and (abs(x) > 8.5 or abs(z) > 8.5):
             scene.warnings.append(f"{n.name} is outside the 16 x 16 m plot ({x:.1f}, {-z:.1f})")
     existing = dict(existing or {})
     result = {"format_version": 2}
@@ -240,6 +334,7 @@ def import_house(glb: str | Path, existing: dict | None, known_types: set[str]) 
     result["rooms"] = _merge_rooms(existing.get("rooms") or {}, rooms, exits, _map_positions(scene, rooms, 5.0),
                                    scene.warnings)
     result["objects"] = _merge_objects(existing.get("objects"), _objects(scene, rooms, known_types), scene.warnings)
+    _check(scene, result["objects"], known_types)
     return result, scene.warnings
 
 
@@ -259,6 +354,10 @@ def import_town(glb: str | Path, existing: dict, known_types: set[str]) -> tuple
 
     plots: dict[str, dict[str, Any]] = {}
     gates = {n.args[0]: n for n in scene.of("gate") if n.args}
+    plot_numbers = {n.args[0] for n in scene.of("plot") if n.args}
+    for number in gates:
+        if number not in plot_numbers:
+            scene.warnings.append(f"gate:{number} has no plot:{number}; ignored")
     for p in scene.of("plot"):
         if not p.args:
             continue
@@ -282,6 +381,7 @@ def import_town(glb: str | Path, existing: dict, known_types: set[str]) -> tuple
     # Exits into houses are added by the server from the houses list, so drop any saved ones.
     result["plots"] = {**{k: v for k, v in (existing.get("plots") or {}).items() if k in plots}, **plots}
     result["objects"] = _merge_objects(existing.get("objects"), _objects(scene, rooms, known_types), scene.warnings)
+    _check(scene, result["objects"], known_types)
     for h in existing.get("houses") or []:
         if str(h.get("plot")) not in plots:
             scene.warnings.append(f"the house of {h.get('owner')!r} is on plot {h.get('plot')!r}, "

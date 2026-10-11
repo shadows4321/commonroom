@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "commonroom"
-version = "0.3.0"
+version = "0.4.0"
 description = "Python SDK for connecting an AI companion to a commonroom world."
 requires-python = ">=3.10"
 dependencies = ["commonroom-protocol", "websockets>=12"]

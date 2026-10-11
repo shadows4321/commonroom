@@ -7,6 +7,8 @@ format_version: 1   # world file format; see packages/protocol/README.md#version
 #   message:  what everyone in the room sees ({actor}, {object}, {target})
 #   reveal:   text only the actor gets back (reading, looking inside)
 #   fail:     what the actor is told when `requires` doesn't hold
+#   pose:     sitting or lying puts the actor on the object (viewers show it);
+#             standing gets them off again. The type's `seats` says how many fit.
 # Containers declare `container: {capacity, requires}`; `requires` is the state
 # needed to reach inside. `schedule` changes state at a world time of day.
 types:
@@ -202,3 +204,11 @@ types:
     schedule:
       - {at: "19:00", sets: {lit: true}, requires: {lit: false}, message: "{object} flickers on as dusk falls."}
       - {at: "06:30", sets: {lit: false}, requires: {lit: true}, message: "{object} goes out with the dawn."}
+
+  sofa:
+    description: A deep, saggy sofa with too many cushions.
+    seats: 3
+    verbs:
+      sit: {description: sit down on it, pose: sitting, message: "{actor} sinks into {object}."}
+      lie_down: {description: stretch out on it, pose: lying, message: "{actor} stretches out on {object}."}
+      get_up: {description: get up, pose: standing, message: "{actor} gets up from {object}.", fail: "You aren't on the sofa."}

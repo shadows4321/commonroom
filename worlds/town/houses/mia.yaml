@@ -9,20 +9,27 @@ rooms:
     exits:
       out: '@street'
       house: living_room
-    map: [0, 1]
+    map: [0, 2]
     description: A small front garden with a rose bush by the path.
   living_room:
     name: Living Room
     exits:
       garden: garden
       kitchen: kitchen
-    map: [0, 0]
+      bedroom: bedroom
+    map: [0, 1]
     description: A cosy living room with a sofa and a bookshelf.
+  bedroom:
+    name: Bedroom
+    exits:
+      living_room: living_room
+    map: [0, 0]
+    description: A snug bedroom with a wide bed under a patchwork quilt.
   kitchen:
     name: Kitchen
     exits:
       living_room: living_room
-    map: [1, 0]
+    map: [1, 1]
     description: A bright little kitchen.
 objects:
 - id: front_door
@@ -31,12 +38,18 @@ objects:
 - id: rose_bush
   type: plant
   room: garden
+- id: sofa
+  type: sofa
+  room: living_room
 - id: lamp
   type: lamp
   room: living_room
 - id: bookshelf
   type: bookshelf
   room: living_room
+- id: bed
+  type: bed
+  room: bedroom
 - id: kettle
   type: kettle
   room: kitchen

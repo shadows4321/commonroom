@@ -63,6 +63,7 @@ class Perception:
             target = self.me if ev["entity"] == self.me_id else self.occupants.get(ev["entity"])
             if target is not None:
                 target["near"] = ev["near"]
+                target["pose"] = ev.get("pose")
         elif kind == PROFILE_CHANGED:
             view = ev["entity_view"]
             if ev["entity"] == self.me_id:
@@ -79,6 +80,10 @@ class Perception:
             (self.typing.add if ev["active"] else self.typing.discard)(ev["entity"])
         elif kind == OBJECT_CHANGED:
             self._place(ev["object"])
+            if "pose" in ev:  # the verb sat the actor down, laid them down or got them up (1.3)
+                actor = self.me if ev.get("actor") == self.me_id else self.occupants.get(ev.get("actor"))
+                if actor is not None:
+                    actor["pose"], actor["near"] = ev["pose"], ev.get("near")
 
     def _place(self, obj: dict) -> None:
         oid = obj["id"]
@@ -137,7 +142,12 @@ class Perception:
         lines = []
         if self.clock:
             lines.append(f"It is {self.clock['label']}.")
-        near = f" (near {_the(self.me['near'])}{self.me['near']['name']})" if self.me.get("near") else ""
+        if self.me.get("pose"):
+            near = f" ({_pose_text(self.me['pose'])})"
+        elif self.me.get("near"):
+            near = f" (near {_the(self.me['near'])}{self.me['near']['name']})"
+        else:
+            near = ""
         lines.append(f"You are {self.me['name']}, in the {self.room['name']}{near}. {self.room['description']}")
         exits = ", ".join(f"{x['direction']} to the {x['to_name']}" for x in self.room["exits"])
         lines.append(f"Exits: {exits or 'none'}.")
@@ -145,7 +155,9 @@ class Perception:
             lines.append("Here with you:")
             for o in self.occupants.values():
                 bits = []
-                if o.get("near"):
+                if o.get("pose"):
+                    bits.append(_pose_text(o["pose"]))
+                elif o.get("near"):
                     bits.append(f"near {_the(o['near'])}{o['near']['name']}")
                 if o.get("holding"):
                     bits.append("holding " + ", ".join(h["name"] for h in o["holding"]))
@@ -177,6 +189,10 @@ class Perception:
 
 def _the(near: dict) -> str:
     return "" if near.get("kind") == "entity" else "the "
+
+
+def _pose_text(pose: dict) -> str:
+    return f"{'lying' if pose['kind'] == 'lying' else 'sitting'} on the {pose['name']}"
 
 
 def _describe_object(obj: dict, prefix: str) -> list[str]:

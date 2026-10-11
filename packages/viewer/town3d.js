@@ -11,6 +11,7 @@ const PROTOCOL_MAJOR = 1;
 const WALK_SPEED = 2.2; // m/s
 const MAX_WALK_SECONDS = 5; // long walks (down a 40 m street) are sped up to fit
 const BUBBLE_SECONDS = 7;
+const POSE_SECONDS = 0.8; // sitting down, lying down or getting up
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -171,6 +172,7 @@ const model = {
   exits: new Map(), // room id -> Map(label -> Object3D)
   objects: new Map(), // object id -> { node, room, parent, position, quaternion }
   spots: new Map(), // object id -> Object3D
+  seats: new Map(), // object id -> [Object3D], in name order (seat:sofa, seat:sofa.001, ...)
   spawns: new Map(), // room id -> [Object3D]
   whenNodes: [], // { node, objectId, conds }
   timeNodes: [], // { node, phases }
@@ -236,6 +238,7 @@ function indexModel(root, areaId, prefix) {
         break;
       }
       case "spot": model.spots.set(prefix + args[0], node); break;
+      case "seat": push(model.seats, prefix + args[0], node); break;
       case "spawn": push(model.spawns, roomId(args[0]), node); break;
       case "when": {
         const obj = ancestorArg(node.parent, "obj");
@@ -245,9 +248,10 @@ function indexModel(root, areaId, prefix) {
       case "time": model.timeNodes.push({ node, phases: rest.split("+") }); break;
       case "ext":
       case "ceiling": {
-        // Inside a house: hide all of its roofs and ceilings. In town (a café): just that room's.
+        // Inside a house: hide all of its roofs and ceilings. In town (a café): just that room's,
+        // and an ext: that isn't inside any room: is never hidden.
         const room = kind === "ceiling" ? args[0] : ancestorArg(node, "room");
-        push(model.hideInside, prefix ? areaId : room ? roomId(room) : areaId, node);
+        if (prefix || room) push(model.hideInside, prefix ? areaId : roomId(room), node);
         break;
       }
       case "wall":
@@ -348,6 +352,8 @@ async function buildWorld() {
       addTiles(houseRooms, origin, 3.2, 3);
     }
   }
+  const rawName = (n) => n.userData.name || n.name || "";
+  for (const list of model.seats.values()) list.sort((a, b) => rawName(a).localeCompare(rawName(b)));
   model.loaded = true;
   frameAll();
   if (state.clock) applyTime(state.clock);
@@ -438,6 +444,11 @@ class Character {
     this.target = null;
     this.lookAt = null;
     this.speed = WALK_SPEED;
+    this.seat = null; // where the server says they sit or lie: { key, kind, pos, facing }
+    this.posed = null; // the seat they are on, or getting onto or off
+    this.from = null; // where they stood before sitting down
+    this.blend = 0; // 0 standing .. 1 fully seated
+    this.hipHeight = 0.86; // standing hip height; bodies are lowered by this much to sit
 
     const label = el("div", "char-label");
     this.bubble = el("div", "bubble");
@@ -473,6 +484,12 @@ class Character {
     this.body = obj;
     this.vrm = vrm;
     this.group.add(obj);
+    this.hipHeight = 0.86;
+    const hips = vrm && vrm.humanoid.getNormalizedBoneNode("hips");
+    if (hips) {
+      obj.updateMatrixWorld(true);
+      this.hipHeight = obj.worldToLocal(hips.getWorldPosition(new THREE.Vector3())).y || 0.86;
+    }
   }
 
   async setAvatar(entity) {
@@ -505,7 +522,15 @@ class Character {
 
   update(dt) {
     let speed = 0;
-    if (this.path.length) {
+    const leaving = this.posed && (!this.seat || this.seat.key !== this.posed.key || this.path.length);
+    if (leaving) {
+      // Get up before walking anywhere.
+      this.blend = Math.max(0, this.blend - dt / POSE_SECONDS);
+      if (this.blend === 0) {
+        this.group.position.copy(this.from);
+        this.posed = null;
+      }
+    } else if (this.path.length) {
       const next = this.path[0];
       const pos = this.group.position;
       const to = new THREE.Vector3().subVectors(next, pos);
@@ -521,7 +546,16 @@ class Character {
       }
     }
     this.moving = speed > 0;
-    if (!this.path.length && this.lookAt) {
+    if (!this.posed && this.seat && !this.path.length) {
+      this.posed = this.seat;
+      this.from = this.group.position.clone();
+    }
+    if (this.posed) {
+      if (!leaving) this.blend = Math.min(1, this.blend + dt / POSE_SECONDS);
+      const t = this.blend * this.blend * (3 - 2 * this.blend);
+      this.group.position.lerpVectors(this.from, this.posed.pos, t);
+      this.facing = this.posed.facing;
+    } else if (!this.path.length && this.lookAt) {
       const pos = this.group.position;
       this.facing = Math.atan2(this.lookAt.x - pos.x, this.lookAt.z - pos.z);
     }
@@ -531,17 +565,43 @@ class Character {
     }
     this.walkPhase += dt * (this.moving ? 9 : 0);
     const swing = this.moving ? Math.sin(this.walkPhase) : 0;
+    const t = this.posed ? this.blend * this.blend * (3 - 2 * this.blend) : 0;
+    const flat = this.body && !this.body.isSprite; // a sprite always faces the camera, so it can only sit
+    const lie = this.posed && this.posed.kind === "lying" && flat ? t : 0;
+    const sit = this.posed ? t - lie : 0;
     if (this.vrm) {
       const bone = (n) => this.vrm.humanoid.getNormalizedBoneNode(n);
+      // Sitting: thighs forward, shins down. Lying: the whole body tips back, legs straight.
       const legs = [["leftUpperLeg", 0.5], ["rightUpperLeg", -0.5]];
-      for (const [b, s] of legs) { const n = bone(b); if (n) n.rotation.x = swing * s; }
+      for (const [b, s] of legs) { const n = bone(b); if (n) n.rotation.x = swing * s - (Math.PI / 2) * sit; }
+      for (const b of ["leftLowerLeg", "rightLowerLeg"]) { const n = bone(b); if (n) n.rotation.x = (Math.PI / 2) * sit; }
       const arms = [["leftUpperArm", -0.35], ["rightUpperArm", 0.35]];
       for (const [b, s] of arms) { const n = bone(b); if (n) n.rotation.x = swing * s; }
       const chest = bone("chest");
-      if (chest) chest.rotation.x = Math.sin(performance.now() / 900) * 0.02; // breathing
+      const breath = lie > 0.5 ? 1600 : 900; // slower while lying down
+      if (chest) chest.rotation.x = Math.sin(performance.now() / breath) * 0.02;
       this.vrm.update(dt);
-    } else if (this.body) {
-      this.body.position.y = this.moving ? Math.abs(Math.sin(this.walkPhase)) * 0.06 : 0;
+    }
+    if (this.body) {
+      // The group stands on the seat; lower the body so the hips land there (or lay it on its back).
+      const drop = this.vrm ? this.hipHeight : 0.35; // a stiff placeholder just sinks in a little
+      const bob = this.moving && !this.vrm ? Math.abs(Math.sin(this.walkPhase)) * 0.06 : 0;
+      this.body.position.set(0, bob - drop * sit + 0.12 * lie, this.hipHeight * lie);
+      this.body.rotation.x = -(Math.PI / 2) * lie;
+      this.label.position.y = 2.05 - 0.6 * sit - 1.3 * lie;
+    }
+  }
+
+  setSeat(seat, teleport) {
+    this.seat = seat;
+    if (teleport && seat) {
+      this.posed = seat;
+      this.from = this.group.position.clone();
+      this.blend = 1;
+      this.group.rotation.y = seat.facing;
+    } else if (teleport) {
+      this.posed = null;
+      this.blend = 0;
     }
   }
 
@@ -628,6 +688,35 @@ function onFloor(roomId, v) {
   return new THREE.Vector3(v.x, floorHeight(roomId, v.x, v.z), v.z);
 }
 
+/**
+ * Where someone sits or lies (protocol 1.3 `pose`): a seat:<obj> marker, facing the marker's
+ * -Y in Blender (+Z here), or else the top of the object, facing the middle of the room.
+ */
+function seatPlace(entity) {
+  const pose = entity.pose;
+  if (!pose) return null;
+  const key = `${pose.kind}:${pose.object}:${pose.seat}`;
+  const markers = model.seats.get(pose.object) || [];
+  if (markers.length) {
+    const node = markers[pose.seat % markers.length];
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion()));
+    const pos = worldPos(node);
+    const extra = Math.floor(pose.seat / markers.length); // more seats in the YAML than markers: squeeze up
+    if (extra) pos.add(new THREE.Vector3(forward.z, 0, -forward.x).multiplyScalar(0.6 * extra));
+    return { key, kind: pose.kind, pos, facing: Math.atan2(forward.x, forward.z) };
+  }
+  const obj = model.objects.get(pose.object);
+  if (!obj || !obj.node.visible) return null;
+  const box = new THREE.Box3().setFromObject(obj.node);
+  if (box.isEmpty()) return null;
+  const centre = box.getCenter(new THREE.Vector3());
+  const room = floorCentre(entity.room) || centre;
+  const away = Math.atan2(room.x - centre.x, room.z - centre.z);
+  const side = (pose.seat % 2 ? 1 : -1) * Math.ceil(pose.seat / 2) * 0.6;
+  const pos = new THREE.Vector3(centre.x + Math.cos(away) * side, pose.kind === "lying" ? box.max.y : Math.min(box.max.y, box.min.y + 0.45), centre.z - Math.sin(away) * side);
+  return { key, kind: pose.kind, pos, facing: away };
+}
+
 /** Where someone in a room stands, and which way they face. */
 function standingPlace(entity, depth = 0) {
   const roomId = entity.room;
@@ -694,6 +783,8 @@ function syncCharacter(entity, { teleport = false } = {}) {
   ch.target = place.pos;
   ch.room = entity.room;
   ch.lookAt = place.look;
+  const seat = seatPlace(entity);
+  if (teleport || (seat && seat.key) !== (ch.seat && ch.seat.key)) ch.setSeat(seat, teleport);
 }
 
 // ----------------------------------------------------------------- camera

@@ -65,6 +65,7 @@ Before going online, replace the example passwords:
 Model them in Blender following [docs/3d-spec.md](docs/3d-spec.md), then:
 
 ```bash
+.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown --check      # list problems, write nothing
 .venv/bin/commonroom-server import-glb town.glb --world worlds/mytown              # the town first
 .venv/bin/commonroom-server import-glb mia.glb  --world worlds/mytown --owner mia  # then each AI's house
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
@@ -94,11 +95,11 @@ Compatibility rules are in [`packages/protocol/README.md#versioning`](packages/p
 | 2. Minimal server | Done |
 | 3. SDK v0 + two scripted bots | Done |
 | 4. Persistence | Done: SQLite state + append-only event log |
-| 5. Objects & interactions | Done: YAML types, `interact`, pick up / put down / put in / give |
+| 5. Objects & interactions | Done: YAML types, `interact`, pick up / put down / put in / give, sitting and lying on furniture |
 | 6. Web viewer (2D) | Done |
 | 7. Time system | Done: world clock, ticks, day phases, scheduled object changes, phase-specific room text |
 | 8. Friends onboard | Done: SDK docs, examples, `add-agent` tokens, hosting guide in `docs/running.md` |
-| 9. 3D viewer | Started: towns of per-AI houses, the Blender spec, a `.glb` importer, and a 3D view at `/3d` with walking characters (placeholder, PNG or VRM), speech bubbles, object states and day/night. Next: your real models, character animations, locked front doors |
+| 9. 3D viewer | Started: towns of per-AI houses, the Blender spec, a `.glb` importer, and a 3D view at `/3d` with walking characters (placeholder, PNG or VRM) that sit on sofas and lie in beds, speech bubbles, object states and day/night. Next: your real models, character animations, locked front doors |
 
 ## Development
 

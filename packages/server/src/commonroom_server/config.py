@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from commonroom_protocol import SUPPORTED_WORLD_FORMATS, WORLD_FORMAT_VERSION
+from commonroom_protocol import POSES, SUPPORTED_WORLD_FORMATS, WORLD_FORMAT_VERSION
 
 
 class ConfigError(ValueError):
@@ -26,6 +26,7 @@ class Verb:
     message: str = "{actor} uses {object}."
     reveal: str | None = None  # text shown only to the actor
     fail: str | None = None
+    pose: str | None = None  # "sitting" or "lying" puts the actor on the object; "standing" gets them off
 
 
 @dataclass
@@ -53,6 +54,7 @@ class ObjectType:
     verbs: dict[str, Verb] = field(default_factory=dict)
     container: ContainerSpec | None = None
     schedule: list[ScheduleEntry] = field(default_factory=list)
+    seats: int = 0  # how many people can sit or lie on it at once (1 if a verb has a pose and it isn't set)
 
 
 @dataclass
@@ -196,6 +198,7 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
             message=v.get("message", "{actor} uses {object}."),
             reveal=v.get("reveal"),
             fail=v.get("fail"),
+            pose=_parse_pose(type_id, verb_name, v.get("pose")),
         )
     container = None
     if raw.get("container"):
@@ -206,6 +209,10 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
         _, minute = parse_time(s["at"])
         schedule.append(ScheduleEntry(at=minute, sets=dict(s.get("sets") or {}),
                                       requires=dict(s.get("requires") or {}), message=s.get("message")))
+    posed = any(v.pose for v in verbs.values())
+    seats = int(raw.get("seats", 1 if posed else 0))
+    if posed and seats < 1:
+        raise ConfigError(f"type {type_id!r} has a verb with a pose, so it needs at least 1 seat")
     return ObjectType(
         id=type_id,
         name=raw.get("name", type_id.replace("_", " ")),
@@ -216,7 +223,17 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
         verbs=verbs,
         container=container,
         schedule=schedule,
+        seats=seats,
     )
+
+
+def _parse_pose(type_id: str, verb: str, value: Any) -> str | None:
+    if value is None:
+        return None
+    if value not in (*POSES, "standing"):
+        raise ConfigError(f"type {type_id!r}, verb {verb!r}: pose must be one of "
+                          f"{', '.join((*POSES, 'standing'))}, not {value!r}")
+    return value
 
 
 def _parse_rooms(raw_rooms: dict, *, prefix: str = "", area: str = "town", name_prefix: str = "",

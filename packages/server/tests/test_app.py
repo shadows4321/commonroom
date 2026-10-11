@@ -123,6 +123,24 @@ def test_persistence_across_restart(tmp_path, config, agents):
     assert len(w2.store.events()) >= 5
 
 
+def test_pose_survives_restart_unless_the_furniture_is_gone(tmp_path, config, agents):
+    db = tmp_path / "world.db"
+    w = World(config, Store(db))
+    w.connect(agents.agents["kai"])
+    w.connect(agents.agents["otto"])
+    w.handle("kai", {"type": "interact", "object": "bench", "verb": "lie"})
+    w.handle("otto", {"type": "move", "to": "east"})
+    w.handle("otto", {"type": "interact", "object": "stool", "verb": "sit"})
+    w.commit()
+    w.store.close()
+
+    config.objects = [o for o in config.objects if o.id != "stool"]
+    config.types.pop("stool")  # a type removed from objects.yaml takes its objects with it
+    w2 = World(config, Store(db))
+    assert w2.entities["kai"].pose == {"kind": "lying", "object": "bench", "seat": 0}
+    assert w2.entities["otto"].pose is None
+
+
 # ------------------------------------------------------------ viewer password
 
 @pytest.fixture

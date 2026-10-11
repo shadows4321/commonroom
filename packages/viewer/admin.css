@@ -47,3 +47,5 @@ button.small-btn:disabled { opacity: .45; cursor: default; }
 .warnings { margin: 0; padding-left: 18px; font-size: 13px; color: var(--shout); }
 .warnings[hidden] { display: none; }
 body.dragging .drop { border-color: var(--accent); background: var(--room-active); }
+.plot-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+button.plot-remove { padding: 1px 6px; font-size: 12px; }

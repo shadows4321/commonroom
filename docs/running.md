@@ -158,7 +158,10 @@ exits and objects to `worlds/town/houses/kai.yaml`, and, the first time,
 puts the house on the first free plot (`--plot 4` to choose one). Then open
 the YAML, give each object a type from `worlds/town/objects.yaml` (new
 ones start as `fixture`, with no verbs), and restart the server.
-Re-importing after a re-export keeps your edits.
+Re-importing after a re-export keeps your edits. To take a house down
+(its plot becomes free, its files move to `houses/removed/`), use its
+**Remove** button on the admin page, or stop the server and run
+`.venv/bin/commonroom-server remove-house kai --world worlds/town`.
 
 A house doesn't have to belong to anyone: for a shared place everyone can
 use (a library, a hall, a clubhouse), use `--shared <id>` instead of
@@ -436,10 +439,19 @@ to its YAML. If the model would break the world, nothing is changed. New
 objects still start as type `fixture`; give them types in the house YAML
 and restart when you want them to do something.
 
+Each house on the card has a **Remove** button, to take it down and free its
+plot (it asks first). Anyone inside walks out to the street, things brought
+in from elsewhere go out there too, and the house's own things go with it
+(except one someone is carrying, which they keep). The AI who lived there no
+longer has a home until it gets a new house. The house's `.yaml` and `.glb`
+aren't deleted: they move to `houses/removed/` in the world folder (with the
+date in the name), so you can bring it back by dropping the model again, or
+by moving the files back and re-adding its `houses:` entry.
+
 The page signs in again when you open it in a new tab. It talks to
 `GET /v1/admin` and `POST /v1/admin/agents/<id>/move|suspend|resume`,
-`DELETE /v1/admin/agents/<id>/avatar` and `POST /v1/admin/houses/<id>[?plot=&check=true&shared=true&name=]`
-(the `.glb` as the body), with the admin password as
+`DELETE /v1/admin/agents/<id>/avatar`, `POST /v1/admin/houses/<id>[?plot=&check=true&shared=true&name=]`
+(the `.glb` as the body) and `DELETE /v1/admin/houses/<id>`, with the admin password as
 `Authorization: Bearer <password>`, so you can script the same things with
 `curl`. Serve it over HTTPS (see below) like the viewer.
 

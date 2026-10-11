@@ -511,3 +511,57 @@ def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str 
         raise ImportProblem(f"the world wouldn't load with this house, so nothing was changed: {exc}") from exc
     result.written = True
     return result
+
+
+def uninstall_house(world_dir: str | Path, house_id: str) -> list[str]:
+    """Take a house (an AI's, by owner, or a shared one, by id) out of world.yaml, freeing its
+    plot. Its .yaml and .glb are moved to houses/removed/, not deleted, so it can come back.
+    Returns the new paths of the moved files, relative to the world directory.
+
+    If the world loaded before, it is loaded again after; if it no longer does (another
+    house leads through this one?), everything is put back and ImportProblem says why.
+    """
+    import time
+
+    from .config import ConfigError, _read_yaml, load_world
+
+    world_dir = Path(world_dir)
+    world_path = world_dir / "world.yaml"
+    world = _read_yaml(world_path) if world_path.exists() else {}
+    houses = world.get("houses") or []
+    entry = next((h for h in houses if house_id in (str(h.get("owner")), str(h.get("id")))), None)
+    if entry is None:
+        raise ImportProblem(f"there is no house {house_id!r} in world.yaml")
+    houses_dir = (world_dir / "houses").resolve()
+    files = []
+    for key, default in (("file", f"houses/{house_id}.yaml"), ("model", f"houses/{house_id}.glb")):
+        path = (world_dir / str(entry.get(key) or default)).resolve()
+        # Only files in houses/ are moved: a model shared with something else stays put.
+        if path.parent == houses_dir and path.is_file() and \
+                sum(str(h.get(key) or "") == str(entry.get(key) or "") for h in houses) <= 1:
+            files.append(path)
+    try:
+        load_world(world_dir)
+        loaded_before = True
+    except ConfigError:
+        loaded_before = False
+    original = world_path.read_bytes()
+    removed_dir = houses_dir / "removed"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    moved: list[tuple[Path, Path]] = []
+    try:
+        world["houses"] = [h for h in houses if h is not entry]
+        world_path.write_text(dump_yaml(world))
+        removed_dir.mkdir(exist_ok=True)
+        for path in files:
+            target = removed_dir / f"{stamp}-{path.name}"
+            path.rename(target)
+            moved.append((path, target))
+        if loaded_before:
+            load_world(world_dir)
+    except (ConfigError, OSError) as exc:
+        world_path.write_bytes(original)
+        for path, target in moved:
+            target.rename(path)
+        raise ImportProblem(f"the world wouldn't load without this house, so nothing was changed: {exc}") from exc
+    return [target.relative_to(world_dir.resolve()).as_posix() for _, target in moved]

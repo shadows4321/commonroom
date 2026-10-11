@@ -70,6 +70,11 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   rolls the files back if the world stops loading), then `Hub.reload` builds
   a new `World(config, store, carry_over=old)`, so state is kept, and sends
   `world_changed` (with a snapshot per AI) and a fresh `world_state` to viewers.
+  Removing one (`DELETE /v1/admin/houses/<id>`, or `remove-house`) goes through
+  `uninstall_house` (files to `houses/removed/`), `World.clear_area` (people and
+  foreign things out to the street), then the same reload. `_restore` drops objects
+  that no world file defines whose room is gone (and their contents), and
+  `Batch.removed` deletes them from the store.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A

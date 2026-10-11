@@ -288,3 +288,32 @@ def test_bad_poses_are_refused(town_dir):
     objects.write_text(text.replace("pose: sitting", "pose: squatting", 1))
     with pytest.raises(ConfigError, match="pose must be one of sitting, lying, standing, not 'squatting'"):
         load_world(town_dir)
+
+
+def test_remove_house_from_the_command_line(town_dir, tmp_path, capsys):
+    from commonroom_server.store import Store
+
+    db = tmp_path / "w.db"
+    w = World(load_world(town_dir), Store(db))
+    w.connect(AgentSpec("mia", "Mia", "t"))
+    w.handle("mia", {"type": "move", "to": "house"})
+    w.objects["cafe_mug"].loc_kind, w.objects["cafe_mug"].loc_id = "container", "mia.bookshelf"  # oddly shelved
+    w._touch(w.objects["cafe_mug"])
+    w.commit()
+    w.store.close()
+
+    cli(["remove-house", "mia", "--world", str(town_dir)])
+    assert "plot is free" in capsys.readouterr().out
+    world = yaml.safe_load((town_dir / "world.yaml").read_text())
+    assert [h["owner"] for h in world["houses"]] == ["otto"]
+    assert not (town_dir / "houses" / "mia.glb").exists()
+
+    # After a restart, the house's things are gone (from the database too), Mia is in the
+    # start room, and the café's mug that was inside the house is back in town.
+    w = World(load_world(town_dir), Store(db))
+    assert not [o for o in w.objects if o.startswith("mia.")]
+    assert w.store.db.execute("SELECT COUNT(*) FROM objects WHERE id LIKE 'mia.%'").fetchone()[0] == 0
+    assert w.entities["mia"].room == "square" and w.objects["cafe_mug"].loc_id == "square"
+    assert "otto.kettle" in w.objects
+    with pytest.raises(SystemExit, match="no house 'mia'"):
+        cli(["remove-house", "mia", "--world", str(town_dir)])

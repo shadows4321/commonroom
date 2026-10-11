@@ -237,3 +237,51 @@ def test_houses_need_a_town(client):
     status = client.get(ADMIN, headers=AUTH).json()
     assert status["can_add_houses"] is False and status["plots"] == []
     assert client.post(f"{ADMIN}/houses/mia", content=b"glTF", headers=AUTH).status_code == 409
+
+
+def test_taking_a_house_down_from_the_admin_page(town_dir):
+    model = (TOWN / "houses" / "mia.glb").read_bytes()
+    with town_client(town_dir) as client, \
+            client.websocket_connect(f"{API_PREFIX}/ws") as mia, \
+            client.websocket_connect(f"{API_PREFIX}/ws/viewer?token=open-sesame") as viewer:
+        assert register(mia, "tok-mia")["snapshot"]["room"]["id"] == "mia.garden"
+        assert viewer.receive_json()["type"] == "world_state"
+        for step in ("house", "kitchen"):
+            mia.send_json({"type": "move", "id": step, "to": step})
+            until(mia, "ack")
+        mia.send_json({"type": "pick_up", "id": "p", "object": "mug"})
+        assert until(mia, "ack")["result"]["object"]["id"] == "mia.mug"
+        world = client.app.state.hub.world
+        world.objects["cafe_mug"].loc_id = "mia.kitchen"  # someone left the café's mug at Mia's
+
+        res = client.delete(f"{ADMIN}/houses/mia", headers=AUTH)
+        assert res.status_code == 200, res.text
+        assert sorted(res.json()["removed"]["files"])[0].startswith("houses/removed/")
+        status = res.json()["status"]
+        assert {p["id"]: p["house"] for p in status["plots"]}["1"] is None
+        assert status["counts"]["rooms"] == 8 and not any(r["area"] == "mia" for r in status["rooms"])
+
+        left = until(mia, "left_room")
+        assert left["to"] == "street_west"
+        changed = until(mia, "world_changed")
+        validate(changed)
+        assert changed["message"] == "Mia's house has been taken down."
+        assert changed["snapshot"]["room"]["id"] == "street_west"
+        assert [o["id"] for o in changed["snapshot"]["you"]["holding"]] == ["mia.mug"]  # still in her hand
+        assert "Mia's house" not in {x["direction"] for x in changed["snapshot"]["room"]["exits"]}
+        state = until(viewer, "world_state")
+        validate(state)
+        assert "mia" not in {a["id"] for a in state["areas"]}
+        world = client.app.state.hub.world
+        assert not [o for o in world.objects if o.startswith("mia.") and o != "mia.mug"]
+        assert world.objects["cafe_mug"].loc_id == "street_west"
+        mia.send_json({"type": "map", "id": "m", "to": "home"})
+        assert until(mia, "action_failed")["reason"] == "no_such_place"  # no home any more
+
+        assert client.delete(f"{ADMIN}/houses/mia", headers=AUTH).status_code == 404
+        assert client.delete(f"{ADMIN}/houses/square", headers=AUTH).status_code == 404
+        assert client.delete(f"{ADMIN}/houses/otto").status_code == 401
+        # The plot is free again, so the house can come back.
+        assert build(client, "mia", model).json()["house"]["plot"] == "1"
+    assert load_world(town_dir).homes["mia"] == "mia.garden"  # rebuilt from the dropped model
+    assert len(list((town_dir / "houses" / "removed").iterdir())) == 2

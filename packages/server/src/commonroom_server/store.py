@@ -129,6 +129,8 @@ class Store:
                     "loc_kind = excluded.loc_kind, loc_id = excluded.loc_id, state = excluded.state, "
                     "name = excluded.name, description = excluded.description",
                     (o.id, o.type, o.loc_kind, o.loc_id, json.dumps(o.state), o.name, o.description))
+            for oid in batch.removed:
+                self.db.execute("DELETE FROM objects WHERE id = ?", (oid,))
             for ev in batch.events:
                 if not ev.log:
                     continue

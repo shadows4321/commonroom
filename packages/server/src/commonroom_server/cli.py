@@ -1,4 +1,4 @@
-"""Command line: `commonroom-server run`, `add-agent`, the passwords and `import-glb`."""
+"""Command line: `commonroom-server run`, `add-agent`, the passwords, `import-glb` and `remove-house`."""
 
 from __future__ import annotations
 
@@ -159,6 +159,20 @@ def _import_glb(args: argparse.Namespace) -> None:
           "then restart the server.")
 
 
+def _remove_house(args: argparse.Namespace) -> None:
+    from .scene_import import ImportProblem, uninstall_house
+
+    try:
+        moved = uninstall_house(args.world, args.house)
+    except ImportProblem as exc:
+        sys.exit(f"can't remove {args.house!r}: {exc}")
+    print(f"took {args.house}'s house out of {Path(args.world) / 'world.yaml'}; its plot is free")
+    for path in moved:
+        print(f"moved its file to {Path(args.world) / path}")
+    print("Restart the server: anyone inside goes home or to the start room, and the house's things go with it. "
+          "(On a running server, the admin page does this without a restart.)")
+
+
 def _report(warnings: list[str], check: bool) -> None:
     for w in warnings:
         print(f"warning: {w}")
@@ -216,6 +230,12 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument("--check", action="store_true",
                      help="only report problems (exit status 1 if there are any); write nothing")
     imp.set_defaults(func=_import_glb)
+
+    rm = sub.add_parser("remove-house", help="take a house out of the town and free its plot "
+                                             "(its files move to houses/removed/)")
+    rm.add_argument("house", help="the AI's id for its house, or a shared house's id")
+    rm.add_argument("--world", required=True, help="world directory, e.g. worlds/town")
+    rm.set_defaults(func=_remove_house)
 
     args = parser.parse_args(argv)
     if getattr(args, "viewer", "unset") is None:

@@ -209,9 +209,18 @@ let checked = null; // the check result for houseFile with the owner and plot ch
 function renderHouses(data) {
   if (!data.can_add_houses) return;
   const names = Object.fromEntries(data.agents.map((a) => [a.id, a.name]));
-  $("plots").replaceChildren(...data.plots.map((p) => el("li", { className: p.house ? "" : "free" },
-    el("div", { textContent: p.owner ? `${names[p.owner] || p.owner}'s house` : p.house ? `${p.house_name} (shared)` : "Empty plot" }),
-    el("div", { className: "sub", textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` }))));
+  $("plots").replaceChildren(...data.plots.map((p) => {
+    const label = p.owner ? `${names[p.owner] || p.owner}'s house` : p.house ? `${p.house_name} (shared)` : "Empty plot";
+    let remove = null;
+    if (p.house) {
+      remove = el("button", { type: "button", className: "small-btn danger plot-remove", textContent: "Remove" });
+      remove.setAttribute("aria-label", `Remove ${label}`);
+      remove.onclick = () => removeHouse(p, label, remove);
+    }
+    return el("li", { className: p.house ? "" : "free" },
+      el("div", { className: "plot-head" }, el("span", { textContent: label }), remove),
+      el("div", { className: "sub", textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` }));
+  }));
 
   const owner = $("house-owner");
   const ownerWas = owner.value;
@@ -240,6 +249,28 @@ function renderHouses(data) {
     if ([...plot.options].some((o) => o.value === plotWas)) plot.value = plotWas;
   }
   plot.disabled = Boolean(mine);
+}
+
+async function removeHouse(p, label, button) {
+  const out = p.street_name || "the street";
+  if (!confirm(`Take down ${label} on plot ${p.id}?\n\nAnyone inside walks out to ${out}, the house's own things `
+    + "go with it, and the plot becomes empty. Its files are kept in houses/removed/ in the world folder.")) return;
+  clearHouseMessages();
+  button.disabled = true;
+  try {
+    const { res, data } = await api("DELETE", `/houses/${encodeURIComponent(p.house)}`);
+    if (res.status === 401) return signOut();
+    if (!res.ok) {
+      show("house-error", data.message || data.detail || `The server said ${res.status}.`);
+      button.disabled = false;
+      return;
+    }
+    render(data.status);
+    show("house-done", `Took down ${label}. Plot ${p.id} is empty now.`);
+  } catch {
+    show("house-error", "Couldn't reach the server.");
+    button.disabled = false;
+  }
 }
 
 function houseQuery(check) {

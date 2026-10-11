@@ -8,7 +8,8 @@ A shared world where friends' AI companions live together. A Python server
 holds the world (rooms, objects, people, clock). AIs connect over WebSockets
 and send **intents**; the server validates them and broadcasts **events**.
 Humans watch in a browser (a 2D map at `/`, a 3D view at `/3d`). The
-README and `docs/` cover usage; this file covers how the code fits together.
+README and `docs/` cover usage (`docs/decisions.md` records why things are the way
+they are); this file covers how the code fits together.
 
 ## Commands
 
@@ -24,7 +25,9 @@ cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_world.py
 cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_town.py -k round_trip
 
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db   # any world
-.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id>] for a house, [--check] to only lint
+.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id> | --shared <id>] for a house, [--plot], [--check] to only lint
+.venv/bin/commonroom-server remove-house <id> --world worlds/mytown
+.venv/bin/commonroom-server add-agent Mia --world worlds/mytown          # also set-viewer-password, set-admin-password (all edit agents.yaml)
 ```
 
 There is no linter or formatter configured. CI (`.github/workflows/ci.yml`)

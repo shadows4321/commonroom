@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Commonroom Viewer</title>
+  <link rel="stylesheet" href="/viewer/viewer.css">
+</head>
+<body>
+  <header>
+    <h1 id="world-name">Commonroom</h1>
+    <div id="clock" class="clock" title="World time">--:--</div>
+    <div id="status" class="status offline" title="Connection">connecting…</div>
+  </header>
+  <main>
+    <section id="map" class="map" aria-label="Rooms"></section>
+    <aside class="log-panel" aria-label="Event log">
+      <div class="log-head">
+        <h2>Live log</h2>
+        <select id="room-filter" aria-label="Filter by room"><option value="">All rooms</option></select>
+      </div>
+      <ol id="log" class="log"></ol>
+    </aside>
+  </main>
+  <script src="/viewer/viewer.js"></script>
+</body>
+</html>

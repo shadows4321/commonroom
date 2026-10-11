@@ -1,0 +1,79 @@
+format_version: 1   # world file format; see packages/protocol/README.md#versioning
+# The House: a small starter world. Rooms are a graph; "map" is only a hint
+# for viewers ([column, row]). Exits are one-way, so list both directions.
+name: The House
+
+settings:
+  start_room: living_room
+  max_carry: 4            # items an entity can hold at once
+  recent_events: 20       # events per room included in snapshots
+  viewer_sees_whispers: true
+  clock:
+    start: "day 1 08:00"
+    minutes_per_real_second: 0.25   # 15 world minutes per real minute: a world day lasts 96 real minutes
+    tick_minutes: 15
+    run_when_empty: false           # the world pauses while no AI is connected
+
+rooms:
+  garden:
+    name: Garden
+    description: A small walled garden with a crooked apple tree and a bench.
+    map: [1, 0]
+    exits: {south: hallway, in: hallway, west: shed}
+    by_phase:
+      dawn: Dew glitters on the grass.
+      night: Crickets chirp in the dark.
+
+  shed:
+    name: Garden Shed
+    description: A cramped wooden shed that smells of soil and oil.
+    map: [0, 0]
+    exits: {east: garden, out: garden}
+
+  hallway:
+    name: Hallway
+    description: A narrow hallway with a coat rack and creaky floorboards.
+    map: [1, 1]
+    exits: {north: garden, out: garden, west: kitchen, east: library, south: living_room}
+
+  kitchen:
+    name: Kitchen
+    description: A warm kitchen with a big wooden table and a window over the sink.
+    map: [0, 1]
+    exits: {east: hallway}
+    by_phase:
+      morning: Sunlight pours through the window.
+
+  library:
+    name: Library
+    description: Floor-to-ceiling shelves of books and a deep leather armchair.
+    map: [2, 1]
+    exits: {west: hallway}
+
+  living_room:
+    name: Living Room
+    description: A cosy living room with a sagging sofa, a fireplace and an old piano.
+    map: [1, 2]
+    exits: {north: hallway}
+    by_phase:
+      evening: The fire crackles softly.
+      night: Embers glow in the fireplace.
+
+objects:
+  - {id: kettle, type: kettle, room: kitchen}
+  - {id: mug_red, type: mug, room: kitchen, name: red mug}
+  - {id: mug_blue, type: mug, room: kitchen, name: blue mug}
+  - {id: cupboard, type: cupboard, room: kitchen}
+  - {id: biscuit_tin, type: tin, in: cupboard, name: biscuit tin}
+  - {id: piano, type: piano, room: living_room}
+  - {id: reading_lamp, type: lamp, room: living_room, name: reading lamp}
+  - {id: radio, type: radio, room: living_room}
+  - {id: chest, type: chest, room: library}
+  - {id: old_letter, type: letter, in: chest, name: old letter}
+  - {id: field_guide, type: book, room: library, name: field guide to birds,
+     description: "A well-thumbed field guide to garden birds."}
+  - {id: brass_key, type: brass_key, in: toolbox}
+  - {id: toolbox, type: toolbox, room: shed}
+  - {id: watering_can, type: watering_can, room: shed, name: watering can}
+  - {id: rose_bush, type: plant, room: garden, name: rose bush}
+  - {id: garden_lantern, type: lantern, room: garden, name: garden lantern}

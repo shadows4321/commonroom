@@ -1,0 +1,25 @@
+format_version: 1   # world file format; see packages/protocol/README.md#versioning
+types:
+  apple: {description: An apple., portable: true}
+  key: {description: A key., portable: true}
+  statue: {description: A heavy statue.}
+  box:
+    description: A box.
+    portable: true
+    state: {open: false}
+    container: {capacity: 2, requires: {open: true}}
+    verbs:
+      open: {requires: {open: false}, sets: {open: true}, message: "{actor} opens {object}."}
+  safe:
+    description: A safe.
+    state: {locked: true}
+    verbs:
+      unlock: {requires: {locked: true}, needs: key, sets: {locked: false}, message: "{actor} unlocks {object} with {target}.", reveal: "Inside is a note."}
+  lamp:
+    description: A lamp.
+    state: {on: false}
+    state_descriptions: [{when: {on: true}, text: It glows.}]
+    verbs:
+      switch_on: {requires: {on: false}, sets: {on: true}, fail: Already on.}
+    schedule:
+      - {at: "07:00", sets: {on: false}, requires: {on: true}, message: "{object} switches itself off."}

@@ -1,0 +1,204 @@
+format_version: 1   # world file format; see packages/protocol/README.md#versioning
+# Object types. Each type declares its default state and its verbs.
+# A verb may:
+#   requires: state that must hold for the verb to be available
+#   needs:    an object type the actor must be holding (e.g. a key)
+#   sets:     state changes applied when it succeeds
+#   message:  what everyone in the room sees ({actor}, {object}, {target})
+#   reveal:   text only the actor gets back (reading, looking inside)
+#   fail:     what the actor is told when `requires` doesn't hold
+# Containers declare `container: {capacity, requires}`; `requires` is the state
+# needed to reach inside. `schedule` changes state at a world time of day.
+types:
+  kettle:
+    description: A dented steel kettle.
+    portable: true
+    state: {filled: false, hot: false}
+    state_descriptions:
+      - {when: {hot: true}, text: Steam curls from its spout.}
+    verbs:
+      fill:
+        description: fill it with water
+        requires: {filled: false}
+        sets: {filled: true}
+        message: "{actor} fills {object} at the sink."
+        fail: It's already full.
+      boil:
+        description: boil the water
+        requires: {filled: true, hot: false}
+        sets: {hot: true}
+        message: "{actor} switches on {object}. It rumbles, then clicks off."
+        fail: It needs to be full and not already hot.
+      pour:
+        description: pour out the water
+        requires: {filled: true}
+        sets: {filled: false, hot: false}
+        message: "{actor} pours from {object}."
+
+  mug:
+    description: A sturdy ceramic mug.
+    portable: true
+    state: {contents: empty}
+    state_descriptions:
+      - {when: {contents: tea}, text: It's full of steaming tea.}
+    verbs:
+      make_tea:
+        description: make a cup of tea (needs hot water nearby)
+        requires: {contents: empty}
+        sets: {contents: tea}
+        message: "{actor} makes a cup of tea in {object}."
+      drink:
+        description: drink from it
+        requires: {contents: tea}
+        sets: {contents: empty}
+        message: "{actor} sips the tea from {object}. Lovely."
+        fail: It's empty.
+
+  cupboard:
+    description: A tall painted cupboard.
+    state: {open: false}
+    container: {capacity: 8, requires: {open: true}}
+    state_descriptions:
+      - {when: {open: true}, text: Its doors stand open.}
+    verbs:
+      open: {description: open the doors, requires: {open: false}, sets: {open: true}, message: "{actor} opens {object}."}
+      close: {description: close the doors, requires: {open: true}, sets: {open: false}, message: "{actor} closes {object}."}
+
+  tin:
+    description: A round tin with a faded picture of a lighthouse.
+    portable: true
+    state: {biscuits: 6}
+    verbs:
+      open:
+        description: peek inside
+        message: "{actor} opens {object} and peeks in."
+        reveal: There are a few shortbread biscuits inside.
+
+  piano:
+    description: An upright piano, slightly out of tune.
+    state: {lid_open: false}
+    verbs:
+      open_lid: {description: lift the lid, requires: {lid_open: false}, sets: {lid_open: true}, message: "{actor} lifts the lid of {object}."}
+      close_lid: {description: close the lid, requires: {lid_open: true}, sets: {lid_open: false}, message: "{actor} closes the lid of {object}."}
+      play:
+        description: play a tune
+        requires: {lid_open: true}
+        message: "{actor} plays a wandering tune on {object}."
+        fail: The lid is closed.
+
+  lamp:
+    description: A brass reading lamp with a green shade.
+    portable: true
+    state: {on: false}
+    state_descriptions:
+      - {when: {on: true}, text: It casts a warm pool of light.}
+    verbs:
+      switch_on: {description: turn it on, requires: {on: false}, sets: {on: true}, message: "{actor} switches on {object}."}
+      switch_off: {description: turn it off, requires: {on: true}, sets: {on: false}, message: "{actor} switches off {object}."}
+
+  radio:
+    description: A wooden valve radio.
+    state: {on: false, station: news}
+    state_descriptions:
+      - {when: {on: true, station: news}, text: A calm voice reads the news.}
+      - {when: {on: true, station: music}, text: Old jazz drifts out of it.}
+    verbs:
+      switch_on: {description: turn it on, requires: {on: false}, sets: {on: true}, message: "{actor} switches on {object}."}
+      switch_off: {description: turn it off, requires: {on: true}, sets: {on: false}, message: "{actor} switches off {object}."}
+      tune_music: {description: tune to music, requires: {on: true, station: news}, sets: {station: music}, message: "{actor} tunes {object} to a music station."}
+      tune_news: {description: tune to the news, requires: {on: true, station: music}, sets: {station: news}, message: "{actor} tunes {object} to the news."}
+
+  chest:
+    description: A heavy oak chest bound with brass.
+    state: {locked: true, open: false}
+    container: {capacity: 6, requires: {open: true}}
+    state_descriptions:
+      - {when: {locked: true}, text: It has a brass keyhole.}
+      - {when: {open: true}, text: The lid is open.}
+    verbs:
+      unlock:
+        description: unlock it with a brass key
+        requires: {locked: true}
+        needs: brass_key
+        sets: {locked: false}
+        message: "{actor} unlocks {object} with {target}."
+      lock:
+        description: lock it with a brass key
+        requires: {locked: false, open: false}
+        needs: brass_key
+        sets: {locked: true}
+        message: "{actor} locks {object} with {target}."
+      open:
+        description: lift the lid
+        requires: {locked: false, open: false}
+        sets: {open: true}
+        message: "{actor} lifts the lid of {object}."
+        fail: It's locked.
+      close: {description: shut the lid, requires: {open: true}, sets: {open: false}, message: "{actor} shuts {object}."}
+
+  letter:
+    description: A folded letter, yellow with age.
+    portable: true
+    verbs:
+      read:
+        description: read it
+        message: "{actor} reads {object}."
+        reveal: "\"To whoever finds this: the roses were planted the summer we met. Please keep them watered. - E.\""
+
+  book:
+    description: A book.
+    portable: true
+    verbs:
+      read:
+        description: read a page
+        message: "{actor} leafs through {object}."
+        reveal: "A robin: small, round, with an orange-red breast. Often the first to sing at dawn."
+
+  brass_key:
+    name: brass key
+    description: A small brass key.
+    portable: true
+
+  toolbox:
+    description: A battered metal toolbox.
+    state: {open: false}
+    container: {capacity: 6, requires: {open: true}}
+    verbs:
+      open: {description: open it, requires: {open: false}, sets: {open: true}, message: "{actor} opens {object}."}
+      close: {description: close it, requires: {open: true}, sets: {open: false}, message: "{actor} closes {object}."}
+
+  watering_can:
+    description: A green watering can.
+    portable: true
+    state: {filled: false}
+    verbs:
+      fill: {description: fill it with water, requires: {filled: false}, sets: {filled: true}, message: "{actor} fills {object} from the rain barrel."}
+
+  plant:
+    description: A rose bush.
+    state: {watered: false}
+    state_descriptions:
+      - {when: {watered: true}, text: Its leaves are glossy and wet.}
+      - {when: {watered: false}, text: It looks a little thirsty.}
+    verbs:
+      water:
+        description: water it (needs a watering can)
+        requires: {watered: false}
+        needs: watering_can
+        sets: {watered: true}
+        message: "{actor} waters {object} with {target}."
+      smell: {description: smell the flowers, message: "{actor} leans in to smell {object}."}
+    schedule:
+      - {at: "12:00", sets: {watered: false}, requires: {watered: true}, message: "The midday sun dries out {object}."}
+
+  lantern:
+    description: An iron lantern on a post.
+    state: {lit: false}
+    state_descriptions:
+      - {when: {lit: true}, text: It glows amber.}
+    verbs:
+      light: {description: light it, requires: {lit: false}, sets: {lit: true}, message: "{actor} lights {object}."}
+      snuff: {description: put it out, requires: {lit: true}, sets: {lit: false}, message: "{actor} snuffs out {object}."}
+    schedule:
+      - {at: "19:00", sets: {lit: true}, requires: {lit: false}, message: "{object} flickers on as dusk falls."}
+      - {at: "06:30", sets: {lit: false}, requires: {lit: true}, message: "{object} goes out with the dawn."}

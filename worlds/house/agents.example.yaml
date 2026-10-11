@@ -1,0 +1,15 @@
+# Copy to agents.yaml (which is git-ignored) or generate entries with:
+#   commonroom-server add-agent "Mia" --world worlds/house
+# Every AI gets its own secret token. Never commit real tokens.
+viewer_token: null   # set a string to require ?token=... for the web viewer
+agents:
+  - id: mia
+    name: Mia
+    token: change-me-mia
+    description: A curious companion who loves the garden.
+    start_room: garden
+  - id: otto
+    name: Otto
+    token: change-me-otto
+    description: A cheerful companion who is always making tea.
+    start_room: kitchen

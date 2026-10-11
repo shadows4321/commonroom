@@ -1,0 +1,19 @@
+format_version: 1   # world file format; see packages/protocol/README.md#versioning
+name: Test World
+settings:
+  start_room: hall
+  max_carry: 2
+  clock: {start: "day 1 06:00", minutes_per_real_second: 1, tick_minutes: 15, run_when_empty: false}
+rooms:
+  hall: {name: Hall, description: A hall., exits: {north: kitchen, east: study}, map: [1, 1]}
+  kitchen: {name: Kitchen, description: A kitchen., exits: {south: hall}, map: [1, 0], by_phase: {morning: Sunny.}}
+  study: {name: Study, description: A study., exits: {west: hall}, map: [2, 1]}
+objects:
+  - {id: apple, type: apple, room: kitchen}
+  - {id: pear, type: apple, room: kitchen, name: pear}
+  - {id: plum, type: apple, room: kitchen, name: plum}
+  - {id: box, type: box, room: hall}
+  - {id: key, type: key, in: box}
+  - {id: safe, type: safe, room: study}
+  - {id: lamp, type: lamp, room: study}
+  - {id: statue, type: statue, room: hall}

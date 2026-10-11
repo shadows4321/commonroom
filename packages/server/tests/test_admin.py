@@ -285,3 +285,65 @@ def test_taking_a_house_down_from_the_admin_page(town_dir):
         assert build(client, "mia", model).json()["house"]["plot"] == "1"
     assert load_world(town_dir).homes["mia"] == "mia.garden"  # rebuilt from the dropped model
     assert len(list((town_dir / "houses" / "removed").iterdir())) == 2
+
+
+# ------------------------------------------------------------- avatars by the host
+
+def test_host_sets_an_avatar(config, agents, tmp_path):
+    from avatar_files import model, png
+
+    config.settings.avatars = {"max_model_mb": 0.0001}  # ~100 bytes: every model is too big
+    agents = dataclasses.replace(agents, admin_password="host-secret")
+    app = create_app(config, agents, viewer_dir=None, clock_interval=0, avatars_dir=tmp_path)
+    with TestClient(app) as c:
+        url = f"{ADMIN}/agents/mia/avatar"
+        assert c.put(url, content=png()).status_code == 401
+        assert c.put(url, content=model(), headers=AUTH).json()["reason"] == "too_large"
+        res = c.put(f"{url}?ignore_limits=true", content=model(), headers=AUTH)
+        assert res.status_code == 200, res.text
+        assert res.json()["avatar"]["kind"] == "vrm"
+        assert next(a for a in res.json()["status"]["agents"] if a["id"] == "mia")["avatar"]["kind"] == "vrm"
+        bad = c.put(f"{url}?ignore_limits=true", content=b"not a model", headers=AUTH)
+        assert bad.json()["reason"] == "unsupported_type"  # the safety checks still apply
+        assert c.put(f"{ADMIN}/agents/nobody/avatar", content=png(), headers=AUTH).status_code == 404
+
+
+def test_avatar_command(config, agents, tmp_path, capsys):
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
+    from avatar_files import model
+    from commonroom_server.cli import main as cli
+
+    agents = dataclasses.replace(agents, admin_password="host-secret")
+    app = create_app(config, agents, viewer_dir=None, clock_interval=0, avatars_dir=tmp_path / "avatars")
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.01)
+    try:
+        world = tmp_path / "world"
+        world.mkdir()
+        (world / "agents.yaml").write_text("admin_password: host-secret\nagents:\n  - {id: mia, name: Mia, token: tok-mia}\n")
+        (tmp_path / "mia.vrm").write_bytes(model())
+        url = f"http://127.0.0.1:{port}"
+        cli(["avatar", "mia", str(tmp_path / "mia.vrm"), "--world", str(world), "--url", url])
+        assert "mia now has a vrm avatar (Test Avatar)" in capsys.readouterr().out
+        assert app.state.hub.world.entities["mia"].avatar["kind"] == "vrm"
+        cli(["avatar", "mia", "--remove", "--world", str(world), "--url", url.replace("http", "ws")])
+        assert "removed mia's avatar" in capsys.readouterr().out
+        with pytest.raises(SystemExit, match="404"):
+            cli(["avatar", "nobody", str(tmp_path / "mia.vrm"), "--world", str(world), "--url", url])
+        (world / "agents.yaml").write_text("agents:\n  - {id: mia, name: Mia, token: tok-mia}\n")
+        with pytest.raises(SystemExit, match="set-admin-password"):
+            cli(["avatar", "mia", str(tmp_path / "mia.vrm"), "--world", str(world), "--url", url])
+    finally:
+        server.should_exit = True
+        thread.join(5)

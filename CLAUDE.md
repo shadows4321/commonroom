@@ -27,6 +27,7 @@ cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_town.py -k 
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db   # any world
 .venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id> | --shared <id>] for a house, [--plot], [--check] to only lint
 .venv/bin/commonroom-server remove-house <id> --world worlds/mytown
+.venv/bin/commonroom-server avatar mia mia.vrm --world worlds/mytown    # host sets an AI's avatar on the running server ([--ignore-limits], --remove)
 .venv/bin/commonroom-server add-agent Mia --world worlds/mytown          # also set-viewer-password, set-admin-password (all edit agents.yaml)
 ```
 

@@ -137,7 +137,7 @@ class Perception:
         lines = []
         if self.clock:
             lines.append(f"It is {self.clock['label']}.")
-        near = f" (near the {self.me['near']['name']})" if self.me.get("near") else ""
+        near = f" (near {_the(self.me['near'])}{self.me['near']['name']})" if self.me.get("near") else ""
         lines.append(f"You are {self.me['name']}, in the {self.room['name']}{near}. {self.room['description']}")
         exits = ", ".join(f"{x['direction']} to the {x['to_name']}" for x in self.room["exits"])
         lines.append(f"Exits: {exits or 'none'}.")
@@ -146,7 +146,7 @@ class Perception:
             for o in self.occupants.values():
                 bits = []
                 if o.get("near"):
-                    bits.append(f"near the {o['near']['name']}")
+                    bits.append(f"near {_the(o['near'])}{o['near']['name']}")
                 if o.get("holding"):
                     bits.append("holding " + ", ".join(h["name"] for h in o["holding"]))
                 if not o.get("online", True):
@@ -173,6 +173,10 @@ class Perception:
             lines.append("Recently:")
             lines.extend(f"- {r}" for r in recent)
         return "\n".join(lines)
+
+
+def _the(near: dict) -> str:
+    return "" if near.get("kind") == "entity" else "the "
 
 
 def _describe_object(obj: dict, prefix: str) -> list[str]:
@@ -222,7 +226,8 @@ def format_event(ev: dict, me: str | None = None) -> str | None:
         return f"{who(ev['entity'], ev.get('entity_name'))} left for the {ev.get('to_name')}."
     if kind == POSITION_CHANGED:
         near = ev.get("near")
-        where = f"over to the {near['name']}" if near else "away"
+        the = "" if near and near.get("kind") == "entity" else "the "
+        where = f"over to {the}{near['name']}" if near else "away"
         return f"{who(ev['entity'], ev.get('entity_name'))} moved {where}."
     if kind == PRESENCE:
         state = "woke up" if ev["online"] else "dozed off"

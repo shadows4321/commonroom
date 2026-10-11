@@ -1,0 +1,97 @@
+format_version: 2   # world file format; see packages/protocol/README.md#versioning
+# Object types for the town. See worlds/house/objects.yaml for a commented
+# guide to verbs, containers and schedules. Houses can add their own types
+# under `types:` in their house file.
+types:
+  fixture:
+    description: Part of the furniture.
+    # import-glb gives new objects this type until you choose a better one.
+
+  door:
+    description: A sturdy wooden door.
+    state: {open: false}
+    state_descriptions:
+      - {when: {open: true}, text: It stands open.}
+    verbs:
+      open: {description: open it, requires: {open: false}, sets: {open: true}, message: "{actor} opens {object}."}
+      close: {description: close it, requires: {open: true}, sets: {open: false}, message: "{actor} closes {object}."}
+
+  lantern:
+    name: street lamp
+    description: An iron street lamp.
+    state: {lit: false}
+    state_descriptions:
+      - {when: {lit: true}, text: It glows amber.}
+    schedule:
+      - {at: "19:00", sets: {lit: true}, requires: {lit: false}, message: "{object} flickers on as dusk falls."}
+      - {at: "06:30", sets: {lit: false}, requires: {lit: true}, message: "{object} goes out with the dawn."}
+
+  fountain:
+    description: A stone fountain, burbling quietly.
+    verbs:
+      toss_coin: {description: toss a coin in and make a wish, message: "{actor} tosses a coin into {object}."}
+
+  coffee_machine:
+    name: coffee machine
+    description: A gleaming espresso machine.
+    state: {on: false}
+    state_descriptions:
+      - {when: {on: true}, text: It hisses and steams.}
+    verbs:
+      switch_on: {description: turn it on, requires: {on: false}, sets: {on: true}, message: "{actor} switches on {object}."}
+      switch_off: {description: turn it off, requires: {on: true}, sets: {on: false}, message: "{actor} switches off {object}."}
+      make_coffee:
+        description: make a coffee
+        requires: {on: true}
+        message: "{actor} makes a coffee with {object}. It smells wonderful."
+        fail: It needs to be switched on first.
+
+  kettle:
+    description: A dented steel kettle.
+    portable: true
+    state: {filled: false, hot: false}
+    state_descriptions:
+      - {when: {hot: true}, text: Steam curls from its spout.}
+    verbs:
+      fill: {description: fill it with water, requires: {filled: false}, sets: {filled: true}, message: "{actor} fills {object} at the sink.", fail: It's already full.}
+      boil: {description: boil the water, requires: {filled: true, hot: false}, sets: {hot: true}, message: "{actor} boils {object}.", fail: It needs to be full and not already hot.}
+      pour: {description: pour out the water, requires: {filled: true}, sets: {filled: false, hot: false}, message: "{actor} pours from {object}."}
+
+  mug:
+    description: A sturdy ceramic mug.
+    portable: true
+    state: {contents: empty}
+    state_descriptions:
+      - {when: {contents: tea}, text: It's full of steaming tea.}
+    verbs:
+      make_tea: {description: make a cup of tea, requires: {contents: empty}, sets: {contents: tea}, message: "{actor} makes a cup of tea in {object}."}
+      drink: {description: drink from it, requires: {contents: tea}, sets: {contents: empty}, message: "{actor} sips the tea from {object}.", fail: It's empty.}
+
+  lamp:
+    description: A tall standing lamp.
+    state: {on: false}
+    state_descriptions:
+      - {when: {on: true}, text: It casts a warm pool of light.}
+    verbs:
+      switch_on: {description: turn it on, requires: {on: false}, sets: {on: true}, message: "{actor} switches on {object}."}
+      switch_off: {description: turn it off, requires: {on: true}, sets: {on: false}, message: "{actor} switches off {object}."}
+
+  bookshelf:
+    description: A bookshelf crammed with paperbacks.
+    verbs:
+      browse:
+        description: pick a book and read a page
+        message: "{actor} pulls a book from {object} and reads a page."
+        reveal: "\"It was a bright cold day in April, and the clocks were striking thirteen.\""
+
+  plant:
+    description: A rose bush.
+    state: {watered: false}
+    state_descriptions:
+      - {when: {watered: true}, text: Its leaves are glossy and wet.}
+      - {when: {watered: false}, text: It looks a little thirsty.}
+    verbs:
+      water: {description: water it, requires: {watered: false}, sets: {watered: true}, message: "{actor} waters {object}."}
+      smell: {description: smell the flowers, message: "{actor} leans in to smell {object}."}
+    schedule:
+      - {at: "12:00", sets: {watered: false}, requires: {watered: true}, message: "The midday sun dries out {object}."}

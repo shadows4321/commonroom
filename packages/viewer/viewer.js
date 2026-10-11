@@ -36,7 +36,7 @@
     history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}`);
   }
 
-  const state = { rooms: new Map(), entities: new Map(), objects: new Map(), typing: new Set(), clock: null };
+  const state = { rooms: new Map(), entities: new Map(), objects: new Map(), areas: new Map(), typing: new Set(), clock: null };
   let selectedRoom = "";
 
   const $ = (id) => document.getElementById(id);
@@ -131,6 +131,7 @@
     $("world-name").textContent = data.name;
     document.title = `${data.name} · Commonroom`;
     state.rooms = new Map(data.rooms.map((r) => [r.id, r]));
+    state.areas = new Map((data.areas || []).map((a) => [a.id, a])); // protocol 1.2+: the town and each house
     state.entities = new Map(data.entities.map((e) => [e.id, e]));
     state.objects = new Map(data.objects.map((o) => [o.id, o]));
     state.typing.clear();
@@ -168,19 +169,33 @@
   // --------------------------------------------------------------------- map
 
   function renderMap() {
+    // One section per area (the town, then each house), each laid out by its rooms' map positions.
+    const byArea = new Map();
+    for (const room of state.rooms.values()) {
+      const area = room.area || "town";
+      if (!byArea.has(area)) byArea.set(area, []);
+      byArea.get(area).push(room);
+    }
     const map = $("map");
-    const rooms = [...state.rooms.values()];
-    const minX = Math.min(...rooms.map((r) => r.map[0]));
-    const minY = Math.min(...rooms.map((r) => r.map[1]));
-    const cols = Math.max(...rooms.map((r) => r.map[0])) - minX + 1;
-    map.style.gridTemplateColumns = `repeat(${cols}, minmax(180px, 1fr))`;
-    map.replaceChildren(...rooms.map((room) => renderRoom(room, minX, minY)));
+    const sections = [...byArea.entries()].map(([areaId, rooms]) => {
+      // Compact the coordinates, so gaps in a sparse layout don't become empty columns.
+      const xs = [...new Set(rooms.map((r) => r.map[0]))].sort((a, b) => a - b);
+      const ys = [...new Set(rooms.map((r) => r.map[1]))].sort((a, b) => a - b);
+      const grid = el("div", "area-grid");
+      grid.style.gridTemplateColumns = `repeat(${xs.length}, minmax(180px, 1fr))`;
+      grid.append(...rooms.map((room) => renderRoom(room, xs, ys)));
+      if (byArea.size === 1) return grid;
+      const section = el("section", "area");
+      section.append(el("h2", "area-title", state.areas.get(areaId)?.name || areaId), grid);
+      return section;
+    });
+    map.replaceChildren(...sections);
   }
 
-  function renderRoom(room, minX, minY) {
+  function renderRoom(room, xs, ys) {
     const card = el("article", `room${room.id === selectedRoom ? " selected" : ""}`);
-    card.style.gridColumn = String(room.map[0] - minX + 1);
-    card.style.gridRow = String(room.map[1] - minY + 1);
+    card.style.gridColumn = String(xs.indexOf(room.map[0]) + 1);
+    card.style.gridRow = String(ys.indexOf(room.map[1]) + 1);
     card.title = room.description;
     card.onclick = () => selectRoom(room.id === selectedRoom ? "" : room.id);
 
@@ -279,7 +294,7 @@
       case "left_room":
         return [["system", `${name(ev.entity, ev.entity_name)} left for the ${ev.to_name}.`]];
       case "position_changed":
-        return [["system", `${name(ev.entity, ev.entity_name)} moved ${ev.near ? `over to the ${ev.near.name}` : "away"}.`]];
+        return [["system", `${name(ev.entity, ev.entity_name)} moved ${ev.near ? `over to ${ev.near.kind === "entity" ? "" : "the "}${ev.near.name}` : "away"}.`]];
       case "presence":
         return [["system", `${name(ev.entity, ev.entity_name)} ${ev.online ? "woke up" : "dozed off"}.`]];
       case "object_changed":

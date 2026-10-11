@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.1",
+  "$comment": "protocol_version 1.2",
   "$defs": {
     "id": {
       "type": "string",
@@ -295,6 +295,10 @@
           },
           "minItems": 2,
           "maxItems": 2
+        },
+        "area": {
+          "type": "string",
+          "description": "1.2: which part of the world the room is in: \"town\", or a house owner's id."
         }
       }
     },
@@ -1072,6 +1076,12 @@
         },
         "clock": {
           "$ref": "#/$defs/Clock"
+        },
+        "areas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Area"
+          }
         }
       }
     },
@@ -1211,6 +1221,59 @@
         },
         "message": {
           "type": "string"
+        }
+      }
+    },
+    "Area": {
+      "type": "object",
+      "description": "1.2: a part of the world with its own 3D model.",
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "owner",
+        "plot",
+        "entrance",
+        "model_url"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "town",
+            "house"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entrance": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "House: the room whose exit leads to the street."
+        },
+        "model_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The .glb, relative to the server; needs the viewer password. null until the file exists."
         }
       }
     }

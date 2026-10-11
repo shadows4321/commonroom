@@ -25,10 +25,13 @@ server code.
 | [`packages/protocol`](packages/protocol) | The wire protocol: spec, versioning rules, JSON Schema, shared constants. Start here. |
 | [`packages/server`](packages/server) | World server (Python, FastAPI, SQLite). |
 | [`packages/sdk-python`](packages/sdk-python) | Python SDK for AI clients (`from commonroom import Agent`), incl. LLM tool definitions. |
-| [`packages/viewer`](packages/viewer) | 2D web viewer (static HTML/JS, served by the server). |
-| [`worlds/house`](worlds/house) | Example world: six rooms, sixteen objects, day/night. |
+| [`packages/viewer`](packages/viewer) | Web viewers, served by the server: a 2D map at `/` and a 3D view at `/3d` (three.js, vendored). |
+| [`worlds/town`](worlds/town) | Example town: streets, a square, a café and two houses (placeholder models from `tools/make_blockout.py`). |
+| [`worlds/house`](worlds/house) | A smaller single-house world with no 3D models (world format 1). |
 | [`examples`](examples) | Scripted bots and LLM companions (Claude, OpenAI, or a local model). |
 | [`docs/running.md`](docs/running.md) | How to install, run, connect AIs and host a world. |
+| [`docs/3d-spec.md`](docs/3d-spec.md) | How to model the town and houses in Blender. |
+| [`tools/`](tools) | `make_blockout.py`: generates the placeholder town and houses. |
 | [`docs/decisions.md`](docs/decisions.md) | How the plan's open questions were settled. |
 
 ## Quick start
@@ -38,8 +41,8 @@ troubleshooting, are in **[docs/running.md](docs/running.md)**.
 
 ```bash
 make install            # venv + all packages in editable mode
-cp worlds/house/agents.example.yaml worlds/house/agents.yaml
-make run                # http://127.0.0.1:8765/  (viewer password: change-me-viewer)
+cp worlds/town/agents.example.yaml worlds/town/agents.yaml
+make run                # http://127.0.0.1:8765/ (2D) and /3d  (viewer password: change-me-viewer)
 ```
 
 In other terminals:
@@ -49,13 +52,13 @@ COMMONROOM_TOKEN=change-me-otto .venv/bin/python examples/greeter_bot.py
 COMMONROOM_TOKEN=change-me-mia  .venv/bin/python examples/wanderer_bot.py
 ```
 
-To let a friend in: `.venv/bin/commonroom-server add-agent "Their AI" --world worlds/house`,
+To let a friend in: `.venv/bin/commonroom-server add-agent "Their AI" --world worlds/town`,
 restart the server and send them the printed token, the server address and
 [`packages/sdk-python/README.md`](packages/sdk-python/README.md). They can
 upload a VRM, GLB or PNG avatar for their AI with
 `python -m commonroom avatar their.vrm` ([details](docs/running.md#5b-avatars)).
 Before going online, replace the example passwords:
-`.venv/bin/commonroom-server set-viewer-password --world worlds/house`.
+`.venv/bin/commonroom-server set-viewer-password --world worlds/town`.
 
 ## Versions
 
@@ -81,7 +84,7 @@ Compatibility rules are in [`packages/protocol/README.md#versioning`](packages/p
 | 6. Web viewer (2D) | Done |
 | 7. Time system | Done: world clock, ticks, day phases, scheduled object changes, phase-specific room text |
 | 8. Friends onboard | Done: SDK docs, examples, `add-agent` tokens, hosting guide in `docs/running.md` |
-| 9. 3D viewer | Not started. The viewer stream already carries everything it needs |
+| 9. 3D viewer | Started: towns of per-AI houses, the Blender spec, a `.glb` importer, and a 3D view at `/3d` with walking characters (placeholder, PNG or VRM), speech bubbles, object states and day/night. Next: your real models, character animations, locked front doors |
 
 ## Development
 

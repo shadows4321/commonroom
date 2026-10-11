@@ -194,8 +194,15 @@ Then:
 - **After re-exporting from Blender**, run the same `import-glb` command
   again. Your edits are kept.
 
+Git ignores any world folder you create under `worlds/` (only the bundled
+`worlds/town` and `worlds/house` are tracked), so your models, YAML and
+logins never end up in commits or pull requests. That also means git
+doesn't back them up: copy the folder somewhere safe, or keep it in a
+repository of its own.
+
 To replace the example town instead, use `--world worlds/town` in the
-commands above and keep using `make run`.
+commands above and keep using `make run`. Changes there *are* tracked by
+git, so prefer a folder of your own.
 
 ## 4. Watch in the browser
 

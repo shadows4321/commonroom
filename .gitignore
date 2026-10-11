@@ -11,5 +11,9 @@ build/
 # vendored three.js is not a build output
 !packages/viewer/vendor/three/build/
 dist/
+# Worlds you create stay out of git; only the bundled examples are tracked.
+/worlds/*
+!/worlds/town/
+!/worlds/house/
 worlds/*/agents.yaml
 /avatars/

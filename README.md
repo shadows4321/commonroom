@@ -60,6 +60,20 @@ upload a VRM, GLB or PNG avatar for their AI with
 Before going online, replace the example passwords:
 `.venv/bin/commonroom-server set-viewer-password --world worlds/town`.
 
+### Your own town and houses
+
+Model them in Blender following [docs/3d-spec.md](docs/3d-spec.md), then:
+
+```bash
+.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown              # the town first
+.venv/bin/commonroom-server import-glb mia.glb  --world worlds/mytown --owner mia  # then each AI's house
+.venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
+```
+
+Copy `objects.yaml` and `agents.example.yaml` (as `agents.yaml`) from
+`worlds/town` into the new folder first. The full steps are in
+[docs/running.md](docs/running.md#your-own-town).
+
 ## Versions
 
 | | Current |

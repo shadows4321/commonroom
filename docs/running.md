@@ -158,7 +158,19 @@ exits and objects to `worlds/town/houses/kai.yaml`, and, the first time,
 puts the house on the first free plot (`--plot 4` to choose one). Then open
 the YAML, give each object a type from `worlds/town/objects.yaml` (new
 ones start as `fixture`, with no verbs), and restart the server.
-Re-importing after a re-export keeps your edits. The town itself works
+Re-importing after a re-export keeps your edits.
+
+A house doesn't have to belong to anyone: for a shared place everyone can
+use (a library, a hall, a clubhouse), use `--shared <id>` instead of
+`--owner`, plus `--name "The Library"` if the id doesn't make a good name:
+
+```bash
+.venv/bin/commonroom-server import-glb library.glb --world worlds/town --shared library --name "The Library"
+```
+
+It goes on a plot like any house, but it is nobody's home, and its rooms
+keep their own names ("Reading Room" rather than "Mia's Reading Room").
+The town itself works
 the same way, without `--owner`:
 `import-glb town.glb --world worlds/town`.
 
@@ -412,7 +424,8 @@ is in and what it holds. For each AI you can:
 
 In a town there's also a **Houses** card listing the plots. Drop a house
 `.glb` anywhere on the page (or click the drop area to choose one), pick
-whose house it is and, for a new house, which empty plot. The page checks the
+whose house it is (or **A new shared house…**, with a name, for one that
+belongs to no AI) and, for a new house, which empty plot. The page checks the
 model first and shows how many rooms and objects it found, plus any warnings
 (the same ones as `import-glb --check`). Then **Build** writes the files, as
 `import-glb --owner` would, and loads the changed world while the server
@@ -425,7 +438,7 @@ and restart when you want them to do something.
 
 The page signs in again when you open it in a new tab. It talks to
 `GET /v1/admin` and `POST /v1/admin/agents/<id>/move|suspend|resume`,
-`DELETE /v1/admin/agents/<id>/avatar` and `POST /v1/admin/houses/<id>[?plot=&check=true]`
+`DELETE /v1/admin/agents/<id>/avatar` and `POST /v1/admin/houses/<id>[?plot=&check=true&shared=true&name=]`
 (the `.glb` as the body), with the admin password as
 `Authorization: Bearer <password>`, so you can script the same things with
 `curl`. Serve it over HTTPS (see below) like the viewer.

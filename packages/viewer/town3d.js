@@ -182,7 +182,7 @@ const model = {
   walls: [], // wall meshes, faded while they're between the camera and who you're following
   plots: new Map(), // plot -> Object3D (town)
   gates: new Map(), // plot -> Object3D (town)
-  houseRoots: new Map(), // owner -> Object3D
+  houseRoots: new Map(), // house (area) id -> Object3D
   loaded: false,
 };
 
@@ -334,7 +334,7 @@ async function buildWorld() {
       plot.matrixWorld.decompose(holder.position, holder.quaternion, holder.scale);
     }
     scene.add(holder);
-    model.houseRoots.set(area.owner, holder);
+    model.houseRoots.set(area.id, holder);
     const houseRooms = rooms.filter((r) => r.area === area.id);
     let loaded = false;
     if (area.model_url) {
@@ -342,7 +342,7 @@ async function buildWorld() {
         const root = await loadModel(area.model_url);
         holder.add(root);
         holder.updateMatrixWorld(true);
-        indexModel(root, area.id, `${area.owner}.`);
+        indexModel(root, area.id, `${area.id}.`);
         loaded = true;
       } catch (err) {
         notice(`Couldn't load ${area.name}: ${err.message || err}`);
@@ -361,7 +361,7 @@ async function buildWorld() {
   minimap.build([...model.floors].map(([id, meshes]) => {
     const room = state.rooms.get(id);
     const area = state.areas.get(room?.area);
-    return { id, name: room?.name || id, area: room?.area, house: area?.kind === "house" ? (state.entities.get(area.owner)?.name || area.name.replace(/'s house$/i, "")) : null, meshes };
+    return { id, name: room?.name || id, area: room?.area, house: area?.kind === "house" ? ((area.owner && state.entities.get(area.owner)?.name) || area.name.replace(/'s house$/i, "")) : null, meshes };
   }));
   frameAll();
   if (state.clock) applyTime(state.clock);
@@ -885,7 +885,7 @@ const pickRay = new THREE.Raycaster();
 const visibleChain = (o) => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
 
 function houseOf(node) {
-  for (let n = node; n; n = n.parent) for (const [owner, holder] of model.houseRoots) if (n === holder) return owner;
+  for (let n = node; n; n = n.parent) for (const [id, holder] of model.houseRoots) if (n === holder) return id;
   return null;
 }
 
@@ -1026,9 +1026,10 @@ function renderInspect() {
   } else if (inspected.kind === "house") {
     const area = state.areas.get(inspected.id);
     if (!area) { inspected = null; card.hidden = true; return; }
-    const owner = state.entities.get(area.owner);
+    const owner = area.owner ? state.entities.get(area.owner) : null;
     title = area.name;
-    sub = owner ? `${owner.name} is ${owner.online ? "awake" : "dozing"}, in ${state.rooms.get(owner.room)?.name || owner.room}` : `Plot ${area.plot}`;
+    sub = owner ? `${owner.name} is ${owner.online ? "awake" : "dozing"}, in ${state.rooms.get(owner.room)?.name || owner.room}`
+      : area.owner ? `Plot ${area.plot}` : `Shared house · plot ${area.plot}`;
     const rooms = [...state.rooms.values()].filter((r) => r.area === area.id);
     const items = rooms.map((r) => {
       const li = el("li", r.id === inspected.room ? "here" : null);

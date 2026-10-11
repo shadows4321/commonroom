@@ -140,6 +140,38 @@ def test_import_a_new_house_takes_a_free_plot(town_dir, capsys):
     assert cfg.rooms["street_west"].exits["Kai's house"] == "kai.garden"
 
 
+def test_a_shared_house_belongs_to_no_one(town_dir, capsys):
+    shutil.copyfile(town_dir / "houses" / "mia.glb", town_dir / "hall.glb")
+    cli(["import-glb", str(town_dir / "hall.glb"), "--world", str(town_dir), "--shared", "hall", "--name", "Town Hall"])
+    assert "the shared house 'hall'" in capsys.readouterr().out
+    world = yaml.safe_load((town_dir / "world.yaml").read_text())
+    hall = next(h for h in world["houses"] if h.get("id") == "hall")
+    assert "owner" not in hall and hall["name"] == "Town Hall" and hall["plot"] == "3"
+    cfg = load_world(town_dir)
+    area = cfg.areas["hall"]
+    assert (area.kind, area.owner, area.name, area.entrance) == ("house", None, "Town Hall", "hall.garden")
+    assert cfg.rooms["street_west"].exits["Town Hall"] == "hall.garden"
+    assert cfg.rooms["hall.kitchen"].name == "Kitchen" and cfg.rooms["hall.kitchen"].area == "hall"
+    assert "hall" not in cfg.homes and "hall.kettle" in {o.id for o in cfg.objects}
+
+    w = World(cfg)
+    assert w.connect(AgentSpec("hall", "Hall", "t")).room == "square"  # nobody lives there
+    w.connect(AgentSpec("mia", "Mia", "t2"))
+    assert w.handle("mia", {"type": "map", "to": "Town Hall"})["destination"]["id"] == "hall.garden"
+    assert next(a for a in w.world_state()["areas"] if a["id"] == "hall")["owner"] is None
+
+
+def test_a_house_has_an_owner_or_an_id(town_dir):
+    world = yaml.safe_load((town_dir / "world.yaml").read_text())
+    world["houses"][0]["id"] = "club"
+    (town_dir / "world.yaml").write_text(yaml.safe_dump(world))
+    with pytest.raises(ConfigError, match="either an owner"):
+        load_world(town_dir)
+    with pytest.raises(SystemExit):
+        cli(["import-glb", str(town_dir / "houses" / "mia.glb"), "--world", str(town_dir), "--owner", "mia",
+             "--shared", "mia"])
+
+
 def test_import_rejects_house_without_way_out(tmp_path):
     mb = _blockout()
     rooms = [n for n in mb.house((1, 1, 1)) if n.name != "room:garden"]

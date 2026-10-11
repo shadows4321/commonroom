@@ -123,19 +123,24 @@ def _import_glb(args: argparse.Namespace) -> None:
         return target.relative_to(world_dir).as_posix()
 
     try:
-        if args.owner:
-            house = install_house(world_dir, glb, args.owner, args.plot, write=not check)
+        if args.owner and args.shared:
+            sys.exit("a house has either an --owner or is --shared, not both")
+        if args.owner or args.shared:
+            hid = args.owner or args.shared
+            house = install_house(world_dir, glb, hid, args.plot, write=not check,
+                                  shared=bool(args.shared), name=args.name)
             warnings = house.warnings
             if check:
                 print(f"{glb}: {house.rooms} rooms, {house.objects} objects (nothing written)")
                 _report(warnings, check)
                 return
-            target = world_dir / "houses" / f"{args.owner}.glb"
+            target = world_dir / "houses" / f"{hid}.glb"
             if glb.resolve() != target.resolve():
                 print(f"copied {glb} -> {target}")
-            print(f"wrote {world_dir / 'houses' / (args.owner + '.yaml')}: {house.rooms} rooms, {house.objects} objects")
+            print(f"wrote {world_dir / 'houses' / (hid + '.yaml')}: {house.rooms} rooms, {house.objects} objects")
             if house.new:
-                print(f"added {args.owner}'s house on plot {house.plot} to {world_path}")
+                what = f"the shared house {hid!r}" if args.shared else f"{hid}'s house"
+                print(f"added {what} on plot {house.plot} to {world_path}")
         else:
             world, warnings = import_town(glb, world, known_types)
             if check:
@@ -203,6 +208,10 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument("file", help="the exported .glb (see docs/3d-spec.md)")
     imp.add_argument("--world", required=True, help="world directory, e.g. worlds/town")
     imp.add_argument("--owner", help="for a house: the AI's id (writes houses/<owner>.yaml); omit for the town")
+    imp.add_argument("--shared", metavar="ID",
+                     help="for a shared house that belongs to no AI, like a library or a hall: its id "
+                          "(writes houses/<id>.yaml)")
+    imp.add_argument("--name", help="with --shared: what the house is called (default: from its id)")
     imp.add_argument("--plot", help="for a new house: which plot it stands on (default: the first free one)")
     imp.add_argument("--check", action="store_true",
                      help="only report problems (exit status 1 if there are any); write nothing")

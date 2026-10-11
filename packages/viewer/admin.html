@@ -54,12 +54,13 @@
 
     <section id="houses" class="card" hidden>
       <h2>Houses</h2>
-      <p class="muted">Drop an AI's house model (a <code>.glb</code> made with <code>docs/3d-spec.md</code>)
+      <p class="muted">Drop an AI's house model, or one for a shared house that belongs to no one (a library, a hall), (a <code>.glb</code> made with <code>docs/3d-spec.md</code>)
         anywhere on this page to build it in the town, or to rebuild a house that's already there.
         Everyone watching sees it straight away; no restart.</p>
       <ul id="plots" class="plots"></ul>
       <div class="house-form">
         <label>For <select id="house-owner"></select></label>
+        <label id="house-name-label" hidden>Called <input id="house-name" type="text" placeholder="The Library" maxlength="60"></label>
         <label>On <select id="house-plot"></select></label>
       </div>
       <label id="house-drop" class="drop" for="house-file">

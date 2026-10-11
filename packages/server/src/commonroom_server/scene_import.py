@@ -420,19 +420,22 @@ _OWNER = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*")
 
 @dataclass
 class HouseImport:
-    owner: str
+    owner: str  # the house's id: its owner's, or a shared house's own
     plot: str
     rooms: int
     objects: int
     new: bool  # a house for someone who had none (False: a re-import of their house)
     warnings: list[str]
     written: bool
+    shared: bool = False
 
 
 def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str | None = None,
-                  write: bool = True) -> HouseImport:
+                  write: bool = True, shared: bool = False, name: str | None = None) -> HouseImport:
     """Import a house model for `owner` into a town: houses/<owner>.glb and .yaml, plus its
     entry (on `plot`, or the first free one) in world.yaml. With write=False, only checks.
+    With shared=True, `owner` is instead the id of a shared house that belongs to no one
+    (`name`, if given, is what it's called in a new world.yaml entry).
 
     If the world loaded before, it is loaded again after writing; if the house broke it,
     every file is put back as it was and ImportProblem says why.
@@ -441,7 +444,10 @@ def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str 
 
     world_dir = Path(world_dir)
     if not _OWNER.fullmatch(owner):
-        raise ImportProblem(f"{owner!r} can't be a house owner: use the AI's id (letters, digits, _ and -)")
+        raise ImportProblem(f"{owner!r} can't be a house id: use letters, digits, _ and -" if shared else
+                            f"{owner!r} can't be a house owner: use the AI's id (letters, digits, _ and -)")
+    if owner == "town":
+        raise ImportProblem("'town' is the town's own id: pick another one for the house")
     world_path = world_dir / "world.yaml"
     world = _read_yaml(world_path) if world_path.exists() else {}
     objects_path = world_dir / "objects.yaml"
@@ -456,7 +462,11 @@ def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str 
         raise ImportProblem("this world has no plots for houses: import the town model first")
 
     houses = world.get("houses") or []
-    mine = next((h for h in houses if h.get("owner") == owner), None)
+    key = "id" if shared else "owner"
+    mine = next((h for h in houses if str(h.get(key)) == owner), None)
+    other = next((h for h in houses if str(h.get("owner" if shared else "id")) == owner), None)
+    if other is not None:
+        raise ImportProblem(f"{owner!r} is already the id of " + ("an AI's house" if shared else "a shared house"))
     if mine is None:
         taken = {str(h.get("plot")) for h in houses}
         free = [p for p in (world.get("plots") or {}) if str(p) not in taken]
@@ -470,7 +480,7 @@ def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str 
     else:
         plot = str(mine.get("plot"))
     result = HouseImport(owner=owner, plot=plot, rooms=len(house["rooms"]), objects=len(house["objects"]),
-                         new=mine is None, warnings=warnings, written=False)
+                         new=mine is None, warnings=warnings, written=False, shared=shared)
     if not write:
         return result
 
@@ -486,8 +496,9 @@ def install_house(world_dir: str | Path, glb: str | Path, owner: str, plot: str 
             model_path.write_bytes(Path(glb).read_bytes())
         house_path.write_text(HOUSE_HEADER + dump_yaml(house))
         if mine is None:
-            world["houses"] = [*houses, {"owner": owner, "plot": plot, "file": f"houses/{owner}.yaml",
-                                         "model": f"houses/{owner}.glb"}]
+            entry = {key: owner, **({"name": name} if shared and name else {}), "plot": plot,
+                     "file": f"houses/{owner}.yaml", "model": f"houses/{owner}.glb"}
+            world["houses"] = [*houses, entry]
             world_path.write_text(dump_yaml(world))
         if loaded_before:
             load_world(world_dir)

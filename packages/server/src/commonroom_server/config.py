@@ -65,7 +65,7 @@ class Room:
     exits: dict[str, str] = field(default_factory=dict)  # direction -> room id
     map: tuple[int, int] = (0, 0)
     by_phase: dict[str, str] = field(default_factory=dict)  # extra description per time-of-day phase
-    area: str = "town"  # which part of the world it belongs to: "town", or a house's owner id
+    area: str = "town"  # which part of the world it belongs to: "town", or a house's id (its owner's, if it has one)
 
 
 STREET = "@street"  # in a house file, the exit target meaning "the street in front of this house"
@@ -77,7 +77,7 @@ class Area:
     id: str
     name: str
     kind: str  # "town" | "house"
-    owner: str | None = None
+    owner: str | None = None  # house: the AI whose home it is; None for the town and shared houses
     plot: str | None = None
     model: Path | None = None  # .glb, relative paths resolved against the world directory
     entrance: str | None = None  # house: the room whose exit leads to the street
@@ -304,16 +304,20 @@ def _world_file(world_dir: Path, rel: str, what: str) -> Path:
 
 def _load_houses(raw: dict, world_dir: Path, rooms: dict[str, Room], types: dict[str, ObjectType],
                  areas: dict[str, Area], homes: dict[str, str]) -> list[ObjectSpec]:
-    """Format 2: houses, one per AI, each with its own file of rooms and objects."""
+    """Format 2: houses, each with its own file of rooms and objects. A house has an `owner`
+    (an AI's id: its home, named after them) or, for a shared house anyone can use, an `id`."""
     plots = {str(k): (v or {}) for k, v in (raw.get("plots") or {}).items()}
     objects: list[ObjectSpec] = []
     used_plots: set[str] = set()
     for h in raw.get("houses") or []:
-        owner = str(h["owner"])
+        if ("owner" in h) == ("id" in h):
+            raise ConfigError(f"house {h!r} needs either an owner (an AI's id) or an id (a shared house), not both")
+        owner = str(h["owner"]) if "owner" in h else None
+        hid = owner or str(h["id"])
         plot = str(h["plot"])
-        where = f"house of {owner!r}"
-        if owner in areas:
-            raise ConfigError(f"{owner!r} has more than one house")
+        where = f"house of {owner!r}" if owner else f"shared house {hid!r}"
+        if hid in areas:
+            raise ConfigError(f"{hid!r} has more than one house" if owner else f"{where}: {hid!r} is already used")
         if plot not in plots:
             raise ConfigError(f"{where} is on plot {plot!r}, which isn't listed under plots")
         if plot in used_plots:
@@ -323,7 +327,7 @@ def _load_houses(raw: dict, world_dir: Path, rooms: dict[str, Room], types: dict
         if street not in rooms:
             raise ConfigError(f"plot {plot!r} faces street {street!r}, which isn't a town room")
 
-        house_path = _world_file(world_dir, h.get("file", f"houses/{owner}.yaml"), f"{where} file")
+        house_path = _world_file(world_dir, h.get("file", f"houses/{hid}.yaml"), f"{where} file")
         if not house_path.exists():
             raise ConfigError(f"{where}: {house_path} doesn't exist (run `commonroom-server import-glb`?)")
         house = _read_yaml(house_path)
@@ -333,11 +337,16 @@ def _load_houses(raw: dict, world_dir: Path, rooms: dict[str, Room], types: dict
                 raise ConfigError(f"{house_path}: type {tid!r} is already defined")
             types[tid] = _parse_type(tid, t or {})
 
-        owner_name = h.get("owner_name", owner.replace("_", " ").title())
-        name = house.get("name", f"{owner_name}'s house")
+        if owner:
+            owner_name = h.get("owner_name", owner.replace("_", " ").title())
+            name = house.get("name", f"{owner_name}'s house")
+            room_prefix = f"{owner_name}'s "
+        else:  # shared: its rooms keep their own names ("Reading Room", not "Library's Reading Room")
+            name = h.get("name", house.get("name", hid.replace("_", " ").title()))
+            room_prefix = ""
         pmap = tuple(plots[plot].get("map", (0, 0)))
-        house_rooms = _parse_rooms(house.get("rooms"), prefix=f"{owner}.", area=owner,
-                                   name_prefix=f"{owner_name}'s ", map_offset=(int(pmap[0]), int(pmap[1])))
+        house_rooms = _parse_rooms(house.get("rooms"), prefix=f"{hid}.", area=hid,
+                                   name_prefix=room_prefix, map_offset=(int(pmap[0]), int(pmap[1])))
         if not house_rooms:
             raise ConfigError(f"{house_path} has no rooms")
         entrances = [r for r in house_rooms.values() if STREET in r.exits.values()]
@@ -354,15 +363,16 @@ def _load_houses(raw: dict, world_dir: Path, rooms: dict[str, Room], types: dict
             raise ConfigError(f"{where}: room ids {sorted(clash)} are already used")
         rooms.update(house_rooms)
 
-        model = h.get("model", f"houses/{owner}.glb")
-        areas[owner] = Area(id=owner, name=name, kind="house", owner=owner, plot=plot,
-                            model=_world_file(world_dir, model, f"{where} model") if model else None,
-                            entrance=entrance.id)
+        model = h.get("model", f"houses/{hid}.glb")
+        areas[hid] = Area(id=hid, name=name, kind="house", owner=owner, plot=plot,
+                          model=_world_file(world_dir, model, f"{where} model") if model else None,
+                          entrance=entrance.id)
         home = house.get("home")
-        homes[owner] = f"{owner}.{home}" if home else next(iter(house_rooms))
-        if homes[owner] not in rooms:
-            raise ConfigError(f"{house_path}: home {home!r} is not one of its rooms")
-        objects += _parse_objects(house.get("objects"), types, prefix=f"{owner}.", where=str(house_path))
+        if owner:  # a shared house is nobody's home
+            homes[owner] = f"{owner}.{home}" if home else next(iter(house_rooms))
+            if homes[owner] not in rooms:
+                raise ConfigError(f"{house_path}: home {home!r} is not one of its rooms")
+        objects += _parse_objects(house.get("objects"), types, prefix=f"{hid}.", where=str(house_path))
     return objects
 
 

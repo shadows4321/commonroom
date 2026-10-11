@@ -74,7 +74,8 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A
   house's single `@street` exit is wired to its plot's street, and the street
-  gets a "<Name>'s house" exit back. A custom YAML loader treats only
+  gets a "<Name>'s house" exit back. A house with an `id:` instead of an `owner:`
+  is shared: prefixed with its id, room names unchanged, `Area.owner` None, no home. A custom YAML loader treats only
   `true`/`false` as booleans, because state keys like `on:` must stay strings.
 - `store.py`: SQLite current state plus an append-only `events` table. Schema
   changes need a `SCHEMA_VERSION` bump **and** an entry in `MIGRATIONS`.

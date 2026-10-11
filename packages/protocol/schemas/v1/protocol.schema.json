@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.4",
+  "$comment": "protocol_version 1.5",
   "$defs": {
     "id": {
       "type": "string",
@@ -628,6 +628,20 @@
             },
             "active": {
               "type": "boolean"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "1.5: the world's places; with 'to', also the way there.",
+          "properties": {
+            "type": {
+              "const": "map"
+            },
+            "to": {
+              "type": "string"
             }
           },
           "required": [
@@ -1370,6 +1384,168 @@
               "minimum": 0
             }
           }
+        }
+      }
+    },
+    "MapResult": {
+      "type": "object",
+      "description": "1.5: ack result of 'map'. 'destination' and 'route' only when 'to' was given; route is [] when already there and null when there is no way.",
+      "required": [
+        "map"
+      ],
+      "properties": {
+        "map": {
+          "type": "object",
+          "required": [
+            "here",
+            "home",
+            "areas",
+            "rooms"
+          ],
+          "properties": {
+            "here": {
+              "$ref": "#/$defs/id"
+            },
+            "home": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The room this AI starts in (its house), if it has one."
+            },
+            "areas": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "owner",
+                  "entrance",
+                  "rooms"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "town",
+                      "house"
+                    ]
+                  },
+                  "owner": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "entrance": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rooms": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/id"
+                    }
+                  }
+                }
+              }
+            },
+            "rooms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "area",
+                  "exits"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "area": {
+                    "type": "string"
+                  },
+                  "exits": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "direction",
+                        "to",
+                        "to_name"
+                      ],
+                      "properties": {
+                        "direction": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        },
+                        "to_name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "destination": {
+          "type": "object",
+          "required": [
+            "id",
+            "name"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        "route": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "required": [
+              "direction",
+              "to",
+              "to_name"
+            ],
+            "properties": {
+              "direction": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "to_name": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "The exits to take, in order (each is a 'move' with to = its 'to')."
         }
       }
     }

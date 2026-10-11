@@ -192,6 +192,29 @@ def test_cant_pick_up_what_someone_sits_on(world):
     fails(world, "mia", "interact", Reason.NOT_NOW, object="stool", verb="sit")  # put it down first
 
 
+def test_map_lists_every_room_and_finds_the_way(world):
+    result, batch = act(world, "mia", "map")
+    assert not batch, "looking at the map changes nothing"
+    m = result["map"]
+    assert m["here"] == "hall" and {r["id"] for r in m["rooms"]} == {"hall", "kitchen", "study"}
+    assert m["areas"][0]["id"] == "town" and set(m["areas"][0]["rooms"]) == {"hall", "kitchen", "study"}
+    assert "route" not in result
+    act(world, "mia", "move", to="north")
+    result, _ = act(world, "mia", "map", to="Study")
+    assert result["destination"] == {"id": "study", "name": "Study"}
+    assert [(s["direction"], s["to"]) for s in result["route"]] == [("south", "hall"), ("east", "study")]
+    assert act(world, "mia", "map", to="kitchen")[0]["route"] == []
+    f = fails(world, "mia", "map", Reason.NO_SUCH_PLACE, to="the moon")
+    assert "Study" in f.details["places"]
+    fails(world, "mia", "map", Reason.BAD_REQUEST, to=5)
+
+
+def test_route_is_none_when_unreachable(world):
+    world.rooms["study"].exits.clear()
+    world.rooms["hall"].exits.pop("east")
+    assert world.route("hall", "study") is None
+
+
 def test_bad_arguments(world):
     fails(world, "mia", "move", Reason.BAD_REQUEST, bogus=1)
     fails(world, "mia", "dance", Reason.UNKNOWN_INTENT)

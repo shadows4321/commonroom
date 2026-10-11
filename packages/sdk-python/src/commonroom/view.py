@@ -253,3 +253,35 @@ def format_event(ev: dict, me: str | None = None) -> str | None:
     if kind == TIME_TICK and ev.get("phase_changed"):
         return f"Time passes. It is now {ev['clock']['label']}."
     return None
+
+
+def format_map(data: dict) -> str:
+    """A `map` result as text for a model: each area's rooms and exits, and the route if asked."""
+    m = data["map"]
+    rooms = {r["id"]: r for r in m["rooms"]}
+    here, home = m.get("here"), m.get("home")
+    lines = []
+    if here in rooms:
+        lines.append(f"You are in {rooms[here]['name']}." + (f" Home is {rooms[home]['name']}." if home in rooms else ""))
+    for area in m["areas"]:
+        if not area["rooms"]:
+            continue
+        title = area["name"]
+        if area.get("entrance") in rooms:
+            title += f" (way in: {rooms[area['entrance']]['name']})"
+        lines.append(f"{title}:")
+        for rid in area["rooms"]:
+            r = rooms[rid]
+            exits = ", ".join(f"{x['direction']} to {x['to_name']}" for x in r["exits"]) or "no exits"
+            lines.append(f"- {r['name']}{' (you are here)' if rid == here else ''}: {exits}")
+    if "destination" in data:
+        dest = data["destination"]["name"]
+        route = data.get("route")
+        if route is None:
+            lines.append(f"There is no way from here to {dest}.")
+        elif not route:
+            lines.append(f"You are already in {dest}.")
+        else:
+            steps = " -> ".join(f"{s['direction']} ({s['to_name']})" for s in route)
+            lines.append(f"Way to {dest}, {len(route)} step{'s' if len(route) > 1 else ''}: {steps}.")
+    return "\n".join(lines)

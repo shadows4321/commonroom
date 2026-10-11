@@ -48,6 +48,9 @@ SCRIPT = [
     ("mia", {"type": "move", "near": "statue"}),
     ("mia", {"type": "look", "at": "box"}),
     ("mia", {"type": "look"}),
+    ("mia", {"type": "map"}),
+    ("mia", {"type": "map", "to": "Kitchen"}),
+    ("mia", {"type": "map", "to": "the moon"}),
     ("mia", {"type": "move", "to": "east"}),
     ("mia", {"type": "interact", "object": "lamp", "verb": "switch_on"}),
     ("mia", {"type": "interact", "object": "bench", "verb": "sit"}),
@@ -79,6 +82,9 @@ def test_live_messages_match_schema(config, agents, tmp_path):
                 msg = socks[who].receive_json()
                 validate(msg)
                 seen.setdefault(msg["type"], msg)
+                if msg["type"] == "ack" and msg["intent"] == "map":
+                    validate(msg["result"], "MapResult")
+                    seen["map"] = msg
                 if msg.get("id") == intent["id"]:
                     break
         res = client.put(f"{API_PREFIX}/avatar", content=model(), headers={"Authorization": "Bearer tok-mia"})
@@ -102,7 +108,7 @@ def test_live_messages_match_schema(config, agents, tmp_path):
             if any(e["type"] == "time_tick" for e in msg["events"]):
                 break
     expected = {"welcome", "ack", "action_failed", "speech", "presence", "object_changed",
-                "position_changed", "left_room", "time_tick", "profile_changed"}
+                "position_changed", "left_room", "time_tick", "profile_changed", "map"}
     assert expected <= set(seen), expected - set(seen)
 
 
@@ -111,6 +117,7 @@ def test_live_messages_match_schema(config, agents, tmp_path):
     {"type": "move"},
     {"type": "register", "protocol": "one", "token": "x"},
     {"type": "give", "object": "key"},
+    {"type": "map", "to": 3},
 ])
 def test_schema_rejects_malformed_intents(bad):
     with pytest.raises(AssertionError):

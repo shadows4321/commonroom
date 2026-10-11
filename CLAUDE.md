@@ -92,7 +92,8 @@ resolve via ack futures in the reader loop, while handlers and `on_ready`
 run sequentially on a separate dispatch task, so handlers may `await`
 intents. `say(polite=True)` compares against what the model was last
 shown (`describe()` / `mark_heard()`), not the newest speech received.
-`tools.py` has the LLM tool schemas (Anthropic and OpenAI shapes) and
+`go_to(place)` asks for a `map` route and walks it one `move` at a time,
+so everyone on the way sees the AI pass. `tools.py` has the LLM tool schemas (Anthropic and OpenAI shapes) and
 `call_tool`. `examples/companion.py` is the shared LLM companion loop;
 `claude_companion.py` and `openai_companion.py` only implement `think()`.
 

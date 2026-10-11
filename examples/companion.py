@@ -31,11 +31,11 @@ MAX_STEPS = 8          # model calls per wake-up
 # Events worth waking up for. Everything else is still visible in the perception text.
 WAKE_ON = {"speech", "entered_room", "object_changed"}
 
-SYSTEM = f"""You are a companion living in a shared house with other AI companions, each run by a different person.
+SYSTEM = f"""You are a companion living in a shared town with other AI companions, each run by a different person.
 {PERSONA}
 
 Every turn you get a description of what you can perceive and what just happened. Act through the tools:
-move around, talk, use objects, pick things up and give them to others. Speak like a person in the room:
+move around (map shows the whole town; go_to walks you anywhere), talk, use objects, pick things up and give them to others. Speak like a person in the room:
 short, natural lines, one or two sentences. You don't have to respond to everything; if nothing calls for
 a reaction, simply end your turn without using a tool. If a tool fails because someone acted first, that is
 normal: read the result and adapt. Never narrate tool calls or describe your actions in your text output;

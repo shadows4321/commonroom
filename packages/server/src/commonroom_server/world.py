@@ -476,6 +476,72 @@ class World:
             except Failure:
                 raise obj_failure from None
 
+    def _do_map(self, e: Entity, to: str | None = None) -> dict:
+        """The world's places and how they connect (1.5). With `to`, also the way there."""
+        result: dict[str, Any] = {"map": self.map_view(e)}
+        if to is not None:
+            dest = self._resolve_place(e, to)
+            result["destination"] = {"id": dest, "name": self.rooms[dest].name}
+            result["route"] = self.route(e.room, dest)
+        return result
+
+    def map_view(self, e: Entity) -> dict:
+        home = self.config.homes.get(e.id)
+        return {
+            "here": e.room,
+            "home": home if home in self.rooms else None,
+            "areas": [
+                {"id": a.id, "name": a.name, "kind": a.kind, "owner": a.owner, "entrance": a.entrance,
+                 "rooms": [r.id for r in self.rooms.values() if r.area == a.id]}
+                for a in self.config.areas.values()
+            ],
+            "rooms": [
+                {"id": r.id, "name": r.name, "area": r.area,
+                 "exits": [{"direction": d, "to": to, "to_name": self.rooms[to].name} for d, to in r.exits.items()]}
+                for r in self.rooms.values()
+            ],
+        }
+
+    def _resolve_place(self, e: Entity, place: Any) -> str:
+        """A room by id or name, a house by its name or owner (its entrance), or "home"."""
+        if not isinstance(place, str) or not place.strip():
+            raise Failure(Reason.BAD_REQUEST, "'to' must be a place name.")
+        wanted = place.strip().lower()
+        for r in self.rooms.values():
+            if wanted in (r.id.lower(), r.name.lower()):
+                return r.id
+        for a in self.config.areas.values():
+            names = {a.id.lower(), a.name.lower()}
+            if a.owner and a.owner in self.entities:
+                names.add(self.entities[a.owner].name.lower())
+            if wanted in names:
+                return a.entrance if a.entrance in self.rooms else \
+                    next((r.id for r in self.rooms.values() if r.area == a.id), e.room)
+        home = self.config.homes.get(e.id)
+        if wanted in ("home", "my home", "my house") and home in self.rooms:
+            return home
+        raise Failure(Reason.NO_SUCH_PLACE, f"There is no place called {place!r}.",
+                      places=[r.name for r in self.rooms.values()])
+
+    def route(self, start: str, dest: str) -> list[dict] | None:
+        """The shortest list of exits from start to dest ([] if already there, None if unreachable)."""
+        came_from: dict[str, tuple[str, str] | None] = {start: None}
+        queue = deque([start])
+        while queue:
+            room = queue.popleft()
+            if room == dest:
+                steps = []
+                while came_from[room] is not None:
+                    prev, direction = came_from[room]
+                    steps.append({"direction": direction, "to": room, "to_name": self.rooms[room].name})
+                    room = prev
+                return steps[::-1]
+            for direction, nxt in self.rooms[room].exits.items():
+                if nxt not in came_from:
+                    came_from[nxt] = (room, direction)
+                    queue.append(nxt)
+        return None
+
     def _do_move(self, e: Entity, to: str | None = None, near: str | None = None) -> dict:
         if to is None and near is None:
             raise Failure(Reason.BAD_REQUEST, "Move where? Give 'to' (an exit or room) and/or 'near'.")

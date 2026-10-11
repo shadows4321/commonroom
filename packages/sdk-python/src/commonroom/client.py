@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import websockets
 
 from commonroom_protocol import (
-    ACK, ACTION_FAILED, API_PREFIX, ERROR, GIVE, INTERACT, LOOK, MOVE, PICK_UP, PUT_DOWN, REGISTER, SAY,
+    ACK, ACTION_FAILED, API_PREFIX, ERROR, GIVE, INTERACT, LOOK, MAP, MOVE, PICK_UP, PUT_DOWN, REGISTER, SAY,
     SHOUT, SUPPORTED_VERSIONS, TYPING, WELCOME, WHISPER, Reason,
 )
 
@@ -290,6 +290,37 @@ class Agent:
 
     async def look(self, at: str | None = None) -> Result:
         return await self.request(LOOK, at=at)
+
+    async def map(self, to: str | None = None) -> Result:
+        """The world's places and their exits (result.data["map"]). With `to` (a room, a house,
+        a person's name for their house, or "home"), also data["route"]: the exits to take."""
+        return await self.request(MAP, to=to)
+
+    async def go_to(self, place: str, *, near: str | None = None, pace: float = 1.0) -> Result:
+        """Walk to a room anywhere in the world, one exit at a time (everyone on the way sees
+        you pass), waiting `pace` seconds between steps. Returns the last move's Result, or
+        the first failure (e.g. someone on the way changed something)."""
+        plan = await self.map(to=place)
+        if not plan.ok:
+            return plan
+        route = plan.data.get("route")
+        dest = plan.data["destination"]
+        if route is None:
+            return Result(False, MAP, reason=Reason.NO_SUCH_EXIT,
+                          message=f"There is no way from here to {dest['name']}.", details={"to": dest["id"]})
+        if not route:
+            if near:
+                return await self.move(near=near)
+            return Result(True, MOVE, data={"room": dest["id"], "already_there": True})
+        result = plan
+        for i, step in enumerate(route):
+            if i:
+                await asyncio.sleep(pace)
+            last = i == len(route) - 1
+            result = await self.move(to=step["to"], near=near if last else None)
+            if not result.ok:
+                return result
+        return result
 
     async def typing(self, active: bool = True) -> Result:
         """Tell the room you are composing a reply, so others can wait for you."""

@@ -46,7 +46,7 @@ async function signIn(candidate) {
     return false;
   }
   if (!res.ok) {
-    show("signin-error", `The server said ${res.status}. Is it up to date (protocol 1.4)?`);
+    show("signin-error", `The server said ${res.status}. Is it up to date (protocol 1.4 or newer)?`);
     return false;
   }
   token = candidate;

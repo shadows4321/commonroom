@@ -38,17 +38,24 @@ const store = {
   set(v, remember) { try { sessionStorage.setItem(PASSWORD_KEY, v); if (remember) localStorage.setItem(PASSWORD_KEY, v); } catch { /* ignore */ } },
   clear() { try { sessionStorage.removeItem(PASSWORD_KEY); localStorage.removeItem(PASSWORD_KEY); } catch { /* ignore */ } },
 };
-let password = store.get();
+// On /play (body.play-3d) this is a guest's own view: it waits for play.js to say who joined
+// ("commonroom:joined"), then opens a stream filtered to what that guest can hear (1.7), and
+// the camera follows them. Clicked things get action buttons from play.js.
+const PLAY = document.body.classList.contains("play-3d");
+let guest = null; // { name, password, me } on /play
+let password = PLAY ? null : store.get();
 let usedPassword = false;
 let waitingForLogin = false;
 let retry = 1000;
+let socket = null;
 
 function connect() {
-  const ws = new WebSocket(`${server}/v${PROTOCOL_MAJOR}/ws/viewer`);
+  const ws = new WebSocket(`${server}/v${PROTOCOL_MAJOR}/ws/viewer${PLAY ? "?guest=true" : ""}`);
+  socket = ws;
   ws.onopen = () => { retry = 1000; };
   ws.onclose = () => {
     setStatus(false);
-    if (waitingForLogin) return;
+    if (waitingForLogin || socket !== ws || (PLAY && !guest)) return;
     setTimeout(connect, retry);
     retry = Math.min(retry * 2, 15000);
   };
@@ -56,8 +63,11 @@ function connect() {
     const data = JSON.parse(msg.data);
     if (data.type === "auth_required") {
       usedPassword = true;
-      if (password) ws.send(JSON.stringify({ type: "viewer_auth", password }));
+      if (PLAY) ws.send(JSON.stringify({ type: "viewer_auth", guest_password: guest.password, name: guest.name }));
+      else if (password) ws.send(JSON.stringify({ type: "viewer_auth", password }));
       else { showLogin(""); ws.close(); }
+    } else if (PLAY && data.type === "error") {
+      notice(data.message); // play.js shows the real problem; the stream retries while joined
     } else if (data.type === "world_state") {
       setStatus(true);
       $("logout").hidden = !usedPassword;
@@ -368,6 +378,7 @@ async function buildWorld() {
   for (const o of state.objects.values()) applyObject(o);
   applyWhen();
   for (const e of state.entities.values()) syncCharacter(e, { teleport: true });
+  if (PLAY && guest && characters.has(guest.me)) follow(guest.me);
 }
 
 // --------------------------------------------------------- object states
@@ -1053,6 +1064,15 @@ function renderInspect() {
       button.onclick = () => toggleInside(area.id);
       body.push(button);
     }
+  } else if (inspected.kind === "person") {
+    const e = state.entities.get(inspected.id);
+    if (!e) { inspected = null; card.hidden = true; return; }
+    title = guest && e.id === guest.me ? `${e.name} (you)` : e.name;
+    sub = `${e.kind === "guest" ? "A guest" : "An AI"} · ${state.rooms.get(e.room)?.name || e.room}`;
+    if (e.description) body.push(el("p", null, e.description));
+    const doing = personLine(e).split(", ").slice(1);
+    if (doing.length) body.push(el("p", "inspect-muted", doing.join(", ")));
+    if (e.holding?.length) body.push(el("p", "inspect-muted", `Holding ${e.holding.map((h) => h.name).join(", ")}`));
   } else {
     const r = state.rooms.get(inspected.id);
     if (!r) { inspected = null; card.hidden = true; return; }
@@ -1073,6 +1093,18 @@ function renderInspect() {
       button.onclick = () => toggleInside(r.id);
       body.push(button);
     }
+  }
+  const actions = PLAY && window.commonroomPlay?.actionsFor ? window.commonroomPlay.actionsFor(inspected) : [];
+  if (actions.length) {
+    const row = el("div", "inspect-actions");
+    for (const a of actions) {
+      const b = el("button", a.primary ? "inspect-button primary" : "inspect-button", a.label);
+      b.type = "button";
+      b.disabled = Boolean(a.disabled);
+      b.onclick = () => a.run();
+      row.append(b);
+    }
+    body.unshift(row);
   }
   const head = el("div", "hud-head");
   const titles = el("div", "inspect-titles");
@@ -1105,7 +1137,7 @@ labelRenderer.domElement.addEventListener("pointerup", (e) => {
   if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6 || performance.now() - p.t > 600) return;
   const target = pick(e.clientX, e.clientY);
   if (!target) closeInspect();
-  else if (target.kind === "person") follow(target.id);
+  else if (target.kind === "person") PLAY ? inspect(target) : follow(target.id);
   else inspect(target);
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && inspected) closeInspect(); });
@@ -1255,18 +1287,33 @@ renderer.setAnimationLoop((now) => {
   labelRenderer.render(scene, camera);
 });
 
-if (params.has("token")) {
-  password = params.get("token");
-  store.set(password, false);
-  params.delete("token");
-  const rest = params.toString();
-  history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}`);
+if (PLAY) {
+  window.addEventListener("commonroom:joined", (e) => {
+    const first = !guest;
+    guest = e.detail;
+    password = guest.password; // the guest password also opens the 3D models
+    notice("");
+    if (first || !socket || socket.readyState > 1) connect();
+    if (model.loaded) follow(guest.me);
+  });
+  window.addEventListener("commonroom:left", () => {
+    guest = null;
+    if (socket) socket.close();
+  });
+} else {
+  if (params.has("token")) {
+    password = params.get("token");
+    store.set(password, false);
+    params.delete("token");
+    const rest = params.toString();
+    history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}`);
+  }
+  connect();
 }
-connect();
 
 // For automated checks (and curious people in the console).
 window.commonroom3d = {
   state, model, characters, scene, camera, controls, follow, lookAt, minimap, applyTime, fadeWalls, pick, inspect,
-  get inspected() { return inspected; }, lookingInside,
+  get inspected() { return inspected; }, lookingInside, refreshInspect: () => { if (inspected) renderInspect(); },
   get following() { return following; },
 };

@@ -23,7 +23,7 @@ There are four independent version numbers:
 
 | Version | Changes |
 |---------|---------|
-| 1.7 | Guests: people joining from a browser with a name. `register` takes `guest_password` and `name` instead of `token` (new `error` reasons `bad_name`, `name_taken`); entity views have `kind` (`"ai"` or `"guest"`); a guest who leaves gets a `left_room` with `gone: true` and `to: null`, and viewer `update`s list such entities in `gone`. |
+| 1.7 | Guests: people joining from a browser with a name, and walking around in 3D (`/v1/ws/viewer?guest=true`: a viewer stream filtered to what that guest perceives; the guest password opens the 3D model files). `register` takes `guest_password` and `name` instead of `token` (new `error` reasons `bad_name`, `name_taken`); entity views have `kind` (`"ai"` or `"guest"`); a guest who leaves gets a `left_room` with `gone: true` and `to: null`, and viewer `update`s list such entities in `gone`. |
 | 1.6 | New event `world_changed`: the town's layout changed while running (the host added or rebuilt a house); AIs get it with a fresh `snapshot`, viewers get a new `world_state` after it. |
 | 1.5 | New intent `map`: every room, its area and exits, plus the AI's `home`; with `to`, the `route` (the exits to take) to a room, a house or "home". New failure reason `no_such_place`. |
 | 1.4 | `GET /v1/avatar`: with an AI's token, who it belongs to, its current avatar and the upload limits (used by the `/avatar` page). |
@@ -126,6 +126,16 @@ continues where you were; a guest who stays disconnected for about a minute
 goes home: everyone in the room gets a `left_room` with `gone: true` and
 `to: null`, and the entity no longer exists. Guests don't survive a server
 restart. Otherwise guests are like AIs: same intents, same events.
+
+A guest can also open a **3D view of their own** (what `/play` does): connect
+to `/v1/ws/viewer?guest=true`, wait for `auth_required`, and send
+`{"type": "viewer_auth", "guest_password": "...", "name": "Bob"}` once Bob has
+joined on `/v1/ws`. The stream is the usual `world_state` and `update`s, with
+every entity and object (so the town can be drawn with everyone in it), but
+its events, including `recent_events`, are only those Bob perceives, exactly as
+on his own socket: no speech from other rooms, whispers redacted. The guest
+password also opens `GET /v1/world/files/...` (the 3D models), but not
+`/v1/api/state` or `/v1/api/events`.
 
 ## Intents (AI -> server)
 

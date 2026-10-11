@@ -161,3 +161,49 @@ def test_play_page_is_served(client):
     page = client.get("/play")
     assert page.status_code == 200 and "Join in" in page.text
     assert client.get("/viewer/play.js").status_code == 200
+
+
+def test_a_guests_3d_view_shows_everyone_but_only_what_they_hear(client, config):
+    with client.websocket_connect(WS) as mia, client.websocket_connect(WS) as bob:
+        assert register(mia, "tok-mia")["type"] == "welcome"
+        assert join(bob, "Bob")["type"] == "welcome"
+        with client.websocket_connect(f"{WS}/viewer?guest=true") as view:
+            assert view.receive_json()["type"] == "auth_required"
+            view.send_json({"type": "viewer_auth", "guest_password": "come-in-123", "name": "bob"})
+            state = view.receive_json()
+            validate(state)
+            assert state["type"] == "world_state" and {"mia", "guest-bob"} <= {e["id"] for e in state["entities"]}
+            mia.send_json({"type": "move", "id": "m", "to": "north"})  # Mia goes to the kitchen...
+            until(mia, "ack")
+            mia.send_json({"type": "say", "id": "s", "text": "secret recipe"})  # ...and talks there
+            until(mia, "ack")
+            bob.send_json({"type": "say", "id": "s2", "text": "anyone?"})  # Bob, in the hall
+            until(bob, "ack")
+            seen, moved = [], False
+            while "anyone?" not in seen:
+                update = view.receive_json()
+                validate(update)
+                moved |= any(e["id"] == "mia" and e["room"] == "kitchen" for e in update["entities"])
+                seen += [ev.get("text") for ev in update["events"] if ev["type"] == "speech"]
+            assert moved, "Bob's view still shows where Mia went"
+            assert "secret recipe" not in seen, "but not what she said in another room"
+        # Without joining first, or with the wrong password, there's no guest view.
+        for name, pw in (("Nobody", "come-in-123"), ("Bob", "wrong")):
+            with client.websocket_connect(f"{WS}/viewer?guest=true") as view:
+                view.receive_json()
+                view.send_json({"type": "viewer_auth", "guest_password": pw, "name": name})
+                assert view.receive_json()["reason"] == "unauthorized"
+
+
+def test_guests_can_load_the_3d_models(guests, tmp_path):
+    from pathlib import Path
+    from commonroom_server.config import load_world
+    town = Path(__file__).resolve().parents[3] / "worlds" / "town"
+    agents = dataclasses.replace(guests, viewer_password="watch-me-123")
+    app = create_app(load_world(town), agents, viewer_dir=None, clock_interval=0, avatars_dir=tmp_path)
+    with TestClient(app) as c:
+        url = next(a["model_url"] for a in c.get(f"{API_PREFIX}/api/state?token=watch-me-123").json()["areas"]
+                   if a["id"] == "town")
+        assert c.get(url, headers={"Authorization": "Bearer come-in-123"}).status_code == 200
+        assert c.get(url, headers={"Authorization": "Bearer nope"}).status_code == 401
+        assert c.get(f"{API_PREFIX}/api/state", headers={"Authorization": "Bearer come-in-123"}).status_code == 401

@@ -1,7 +1,8 @@
 // The /play page: a person joins with a name and the guest password, and acts through the
-// same intents as an AI (see packages/protocol/README.md). Everything shown comes from what
-// this person perceives: their own snapshots and events. Never the viewer stream, which
-// would show them other people's whispers.
+// same intents as an AI (see packages/protocol/README.md). The panels and the chat come from
+// what this person perceives: their own snapshots and events. The 3D town around them is
+// town3d.js in play mode, on a stream the server filters to what this guest can hear; this
+// file tells it who joined ("commonroom:joined") and what clicked things can do (actionsFor).
 const PROTOCOL = "1.7";
 const PACE_MS = 1000; // between steps when walking somewhere far, so others see you pass
 const $ = (id) => document.getElementById(id);
@@ -51,6 +52,7 @@ function colorFor(id) {
 }
 
 const words = (s) => String(s).replace(/_/g, " ");
+const the = (name) => (/'s /.test(name || "") ? name : `the ${name}`); // "the Café", but "Otto's Kitchen"
 
 // ---------------------------------------------------------------- socket
 
@@ -107,10 +109,12 @@ function receive(msg) {
     $("play").hidden = false;
     $("leave").hidden = false;
     setStatus("here", true);
+    window.dispatchEvent(new CustomEvent("commonroom:joined",
+      { detail: { name: snap.you.name, password: creds.password, me } }));
     if (first) {
       $("log").replaceChildren();
       for (const ev of snap.recent_events || []) if (ev.entity !== me) logEvent(ev); // not your own arrival
-      logLine([["system", `You're in the ${snap.room.name}. Say hello!`]]);
+      logLine([["system", `You're in ${the(snap.room.name)}. Say hello!`]]);
     }
     render();
     loadPlaces();
@@ -135,14 +139,15 @@ function stop(message) {
   stopped = true;
   joined = false;
   if (ws) ws.close();
+  window.dispatchEvent(new CustomEvent("commonroom:left"));
   $("play").hidden = true;
   $("leave").hidden = true;
-  $("status").hidden = true;
+  $("play-status").hidden = true;
   showJoin(message);
 }
 
 function setStatus(text, ok) {
-  const s = $("status");
+  const s = $("play-status");
   s.hidden = false;
   s.textContent = text;
   s.className = `status ${ok ? "online" : "offline"}`;
@@ -219,19 +224,19 @@ function describe(ev) {
         return [["speaker", speaker], ["whisper", ` ${mine ? "whisper" : "whispers"} to ${to}: ${ev.text == null ? "…" : `“${ev.text}”`}`]];
       }
       if (ev.mode === "shout") {
-        if (ev.muffled) return [["system", `(muffled, from the ${ev.from_room_name}) `], ["speaker", speaker], ["shout", `: “${ev.text}”`]];
+        if (ev.muffled) return [["system", `(muffled, from ${the(ev.from_room_name)}) `], ["speaker", speaker], ["shout", `: “${ev.text}”`]];
         return [["speaker", speaker], ["shout", ` ${mine ? "shout" : "shouts"}: “${ev.text}”`]];
       }
       return [["speaker", speaker], [null, `: ${ev.text}`]];
     }
     case "entered_room":
-      if (ev.entity === me) return ev.from ? [["system", `You walk into the ${snap?.room?.name || "room"}.`]] : null;
-      return [["system", ev.from_name ? `${who(ev.entity, ev.entity_name)} came in from the ${ev.from_name}.`
+      if (ev.entity === me) return ev.from ? [["system", `You walk into ${the(snap?.room?.name || "room")}.`]] : null;
+      return [["system", ev.from_name ? `${who(ev.entity, ev.entity_name)} came in from ${the(ev.from_name)}.`
         : `${who(ev.entity, ev.entity_name)} is here.`]];
     case "left_room":
       if (ev.entity === me) return null;
       if (ev.gone) return [["system", `${who(ev.entity, ev.entity_name)} went home.`]];
-      return [["system", `${who(ev.entity, ev.entity_name)} left for the ${ev.to_name}.`]];
+      return [["system", `${who(ev.entity, ev.entity_name)} left for ${the(ev.to_name)}.`]];
     case "position_changed": {
       const near = ev.near;
       return [["system", `${who(ev.entity, ev.entity_name)} ${ev.entity === me ? "move" : "moved"} ${near ? `over to ${near.kind === "entity" ? "" : "the "}${near.name}` : "away"}.`]];
@@ -272,7 +277,13 @@ function logLine(parts, worldTime = snap?.clock?.minutes, cls = null) {
 
 // --------------------------------------------------------------- acting
 
+function cameraOnMe() {
+  const view = window.commonroom3d;
+  if (view && me && view.following !== me) view.follow(me); // and lift the roof where you go
+}
+
 async function act(type, args) {
+  if (type === "move") cameraOnMe();
   const r = await request(type, args);
   if (r.type === "action_failed") {
     logLine([["failed", `Couldn't do that: ${r.message}`]]);
@@ -292,20 +303,25 @@ async function loadPlaces() {
   renderPlaces();
 }
 
-async function walkTo(place) {
+async function walkTo(place, near = null) {
   const r = await request("map", { to: place });
   if (r.type !== "ack") return logLine([["failed", r.message]]);
   const route = r.result.route;
   if (route == null) return logLine([["failed", `There's no way from here to ${r.result.destination.name}.`]]);
-  if (!route.length) return logLine([["system", `You're already in the ${r.result.destination.name}.`]]);
+  if (!route.length) {
+    if (near) return act("move", { near });
+    return logLine([["system", `You're already in ${the(r.result.destination.name)}.`]]);
+  }
   walking = true;
+  cameraOnMe();
   $("walking").hidden = false;
   $("walking").textContent = `Walking to ${r.result.destination.name}…`;
   render();
   try {
     for (const [i, step] of route.entries()) {
       if (i) await new Promise((ok) => setTimeout(ok, PACE_MS));
-      const moved = await act("move", { to: step.to });
+      const last = i === route.length - 1;
+      const moved = await act("move", near && last ? { to: step.to, near } : { to: step.to });
       if (moved.type !== "ack") break;
     }
   } finally {
@@ -388,6 +404,70 @@ function render() {
   renderHolding();
   renderComposer();
   renderPlaces();
+  window.commonroom3d?.refreshInspect?.();
+}
+
+// ------------------------------------------------- clicking things in 3D
+// What a thing clicked in the town (town3d.js's info card) lets you do: use it if it's here,
+// otherwise walk there.
+
+function findHere(id) {
+  for (const o of snap.you.holding || []) if (o.id === id) return { o, held: true };
+  for (const o of snap.objects) {
+    if (o.id === id) return { o, held: false };
+    for (const c of o.contents || []) if (c.id === id) return { o: c, held: false };
+  }
+  return null;
+}
+
+function roomOfObject(id, world, depth = 0) {
+  const o = world.objects.get(id);
+  if (!o || depth > 8) return null;
+  if (o.location.kind === "room") return o.location.id;
+  if (o.location.kind === "entity") return world.entities.get(o.location.id)?.room || null;
+  return roomOfObject(o.location.id, world, depth + 1);
+}
+
+function actionsFor(t) {
+  if (!snap || !joined) return [];
+  const world = window.commonroom3d?.state;
+  const here = snap.room.id;
+  const go = (room, label, near = null) => (room && (room !== here || near)
+    ? [{ label, primary: true, disabled: walking, run: () => walkTo(room, near) }] : []);
+  if (t.kind === "object") {
+    const found = findHere(t.id);
+    if (!found) return world ? go(roomOfObject(t.id, world), "Walk over there", t.id) : [];
+    const { o, held } = found;
+    const list = (o.verbs || []).map((v) => ({ label: words(v.verb), disabled: walking,
+      run: () => act("interact", { object: o.id, verb: v.verb }) }));
+    if (held) list.push({ label: "Put down", disabled: walking, run: () => act("put_down", { object: o.id }) });
+    else {
+      if (o.portable) list.push({ label: "Pick up", disabled: walking, run: () => act("pick_up", { object: o.id }) });
+      if (snap.objects.some((x) => x.id === o.id)) {
+        list.push({ label: "Stand by it", disabled: walking, run: () => act("move", { near: o.id }) });
+      }
+    }
+    return list;
+  }
+  if (t.kind === "person") {
+    if (t.id === me) return [];
+    const p = snap.occupants.find((x) => x.id === t.id);
+    if (p) {
+      return [
+        { label: "Whisper", run: () => { $("say-mode").value = `whisper:${p.id}`; $("say-text").focus(); } },
+        { label: "Stand by them", disabled: walking, run: () => act("move", { near: p.id }) },
+      ];
+    }
+    const e = world?.entities.get(t.id);
+    return e ? go(e.room, `Go to ${e.name}`, e.id) : [];
+  }
+  if (t.kind === "room") return go(t.id, "Walk here");
+  if (t.kind === "house") {
+    const area = places?.areas.find((a) => a.id === t.id);
+    if (t.room) return go(t.room, "Walk to this room");
+    return go(area?.entrance, area?.entrance === here ? "" : "Walk to the door");
+  }
+  return [];
 }
 
 function renderPeople() {
@@ -414,7 +494,7 @@ function renderPeople() {
     li.append(row);
     return li;
   });
-  $("people").replaceChildren(...(items.length ? items : [el("li", "empty", "Nobody else is here.")]));
+  $("people-here").replaceChildren(...(items.length ? items : [el("li", "empty", "Nobody else is here.")]));
 }
 
 function objectItem(o, { held = false } = {}) {
@@ -532,4 +612,10 @@ if (creds?.name && creds?.password) {
 }
 
 // For automated checks.
-window.commonroomPlay = { get snap() { return snap; }, get me() { return me; }, act, request, walkTo };
+window.commonroomPlay = { get snap() { return snap; }, get me() { return me; }, act, request, walkTo, actionsFor };
+
+$("panel-toggle").onclick = () => {
+  const hidden = document.body.classList.toggle("panel-hidden");
+  $("panel-toggle").textContent = hidden ? "Show panel" : "Hide panel";
+  $("panel-toggle").setAttribute("aria-expanded", String(!hidden));
+};

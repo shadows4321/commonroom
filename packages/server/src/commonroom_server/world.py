@@ -399,15 +399,20 @@ class World:
             "max_carry": self.settings.max_carry,
         }
 
-    def world_state(self) -> dict:
-        """The full world, for viewers."""
+    def world_state(self, as_entity: str | None = None) -> dict:
+        """The full world, for viewers. For a guest's 3D view (`as_entity`), the recent events
+        are only those that guest perceived, like on their own socket."""
         reveal = self.settings.viewer_sees_whispers
+        if as_entity is None:
+            recent = [ev.to_wire(reveal_private=reveal) for ev in self.global_recent]
+        else:
+            recent = [ev.to_wire(as_entity) for ev in self.global_recent if ev.visible_to(as_entity)]
         return {
             "name": self.config.name,
             "rooms": [self.room_view(r) for r in self.rooms],
             "entities": [self.entity_view(e) for e in self.entities.values()],
             "objects": [self.object_view(o, nested=False) for o in self.objects.values()],
-            "recent_events": [ev.to_wire(reveal_private=reveal) for ev in self.global_recent],
+            "recent_events": recent,
             "clock": self.clock.view(),
             "areas": [self.area_view(a) for a in self.config.areas.values()],
         }

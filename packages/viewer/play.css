@@ -6,12 +6,6 @@ body.play-page { overflow: hidden; }
 }
 .login-card input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.play {
-  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 12px; padding: 12px;
-  background: linear-gradient(var(--tint), var(--tint)), var(--bg);
-}
-.play[hidden] { display: none; }
-.play-left { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; padding-bottom: 8px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 .card h3 {
   margin: 10px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
@@ -67,11 +61,31 @@ body.play-page { overflow: hidden; }
 }
 .composer input:focus, .goto select:focus, .composer select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* The 3D stage with the panels over it: where you are (left), the town and the info card
+   (right, from town3d.css), the conversation (bottom right) and the map (bottom left). */
+.play-stage[hidden] { display: none; }
+.play-panel {
+  position: absolute; top: 12px; left: 12px; width: 330px; max-height: calc(100% - 290px); min-height: 160px;
+  display: flex; flex-direction: column; gap: 8px; overflow-y: auto; z-index: 2;
+}
+body.panel-hidden .play-panel { display: none; }
+.play-panel .card { padding: 10px 12px; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); }
+.hint { font-size: 12px; margin: 8px 0 0 !important; }
+.play-3d .hud { max-height: calc(100% - 42vh - 36px); }
+.play-chat {
+  position: absolute; right: 12px; bottom: 12px; width: min(420px, calc(100% - 370px)); height: 40vh; z-index: 2;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px);
+}
+.play-3d .minimap { z-index: 2; }
+
 @media (max-width: 760px) {
   body.play-page { overflow: auto; }
-  .play { display: flex; flex-direction: column; overflow: visible; flex: none; min-height: auto; }
-  .play-left { overflow: visible; min-height: auto; flex: none; }
-  .composer select { max-width: 34%; }
-  .chat-card { min-height: 60vh; }
+  .play-stage { display: flex; flex-direction: column; overflow: visible; min-height: auto; flex: none; }
+  .play-stage .canvas-host { position: relative; height: 55vh; flex: none; }
+  .play-panel, .play-3d .hud, .play-chat, .play-3d .minimap {
+    position: static; width: auto; max-height: none; height: auto; margin: 8px 8px 0;
+  }
+  .play-chat { min-height: 50vh; margin-bottom: 8px; }
+  .play-3d .minimap { display: none; }
   header .clock { display: none; }
 }

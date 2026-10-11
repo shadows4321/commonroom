@@ -69,6 +69,7 @@ class Connection:
         self.ws = ws
         self.queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self.writer = asyncio.create_task(self._write())
+        self.as_guest: str | None = None  # a viewer that is a guest's 3D view: events filtered to what they perceive
 
     async def _write(self) -> None:
         with contextlib.suppress(Exception):
@@ -126,8 +127,7 @@ class Hub:
         name = " ".join(str(name or "").split())
         if not GUEST_NAME.fullmatch(name):
             return None, ("bad_name", "Pick a name of 1 to 24 letters, digits or spaces.")
-        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or hashlib.sha1(name.encode()).hexdigest()[:8]
-        gid = f"guest-{slug}"
+        gid = guest_id(name)
         lower = name.lower()
         for spec in self.agents.agents.values():
             if lower in (spec.id.lower(), spec.name.lower()):
@@ -142,6 +142,22 @@ class Hub:
         spec = self.guests.get(gid) or AgentSpec(id=gid, name=name, token="", kind="guest")
         self.guests[gid] = spec
         return spec, None
+
+    def guest_password_ok(self, password) -> bool:
+        expected = self.agents.guest_password
+        return (expected is not None and isinstance(password, str)
+                and hmac.compare_digest(expected.encode(), password.encode()))
+
+    def guest_viewer(self, password, name) -> str | None:
+        """The guest a 3D view on /play belongs to: they must have joined (on the AI socket)."""
+        if not self.guest_password_ok(password):
+            return None
+        gid = guest_id(" ".join(str(name or "").split()))
+        return gid if gid in self.guests and gid in self.world.entities else None
+
+    def world_state_for(self, conn: Connection) -> dict:
+        return {"type": WORLD_STATE, "protocol": PROTOCOL_VERSION, "server_version": SERVER_VERSION,
+                **self.world.world_state(conn.as_guest)}
 
     def guest_left(self, gid: str, grace: float) -> None:
         """A guest closed /play: after `grace` seconds without coming back, they go home."""
@@ -184,7 +200,11 @@ class Hub:
             if batch.gone:
                 update["gone"] = sorted(batch.gone)  # 1.7: entities that left the world (guests)
             for conn in self.viewers:
-                conn.send(update)
+                if conn.as_guest is None:
+                    conn.send(update)
+                else:  # a guest's 3D view: everyone's whereabouts, but only the words they could hear
+                    gid = conn.as_guest
+                    conn.send({**update, "events": [ev.to_wire(gid) for ev in batch.events if ev.visible_to(gid)]})
 
     def reload(self, config: WorldConfig, message: str) -> None:
         """Switch to a changed world config (a house was added) without a restart. People,
@@ -204,10 +224,8 @@ class Hub:
                     conn.send({**ev.to_wire(eid), "snapshot": world.snapshot(eid)})
                 elif ev.visible_to(eid):
                     conn.send(ev.to_wire(eid))
-        state = {"type": WORLD_STATE, "protocol": PROTOCOL_VERSION, "server_version": SERVER_VERSION,
-                 **world.world_state()}
         for conn in self.viewers:
-            conn.send(state)
+            conn.send(self.world_state_for(conn))
 
     async def clock_loop(self, interval: float) -> None:
         last = time.monotonic()
@@ -217,6 +235,12 @@ class Hub:
             self.world.advance_clock(now - last)
             last = now
             self.dispatch(self.world.commit())
+
+
+def guest_id(name: str) -> str:
+    """A guest's entity id from their (tidied) name: guest-bob."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or hashlib.sha1(name.encode()).hexdigest()[:8]
+    return f"guest-{slug}"
 
 
 def _bearer(request: Request) -> str | None:
@@ -267,6 +291,13 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
 
     async def require_viewer(request: Request, token: str | None) -> None:
         if not hub.viewer_allowed(_bearer(request) or token):
+            await asyncio.sleep(AUTH_FAILURE_DELAY)
+            raise HTTPException(401, "wrong viewer password")
+
+    async def require_viewer_or_guest(request: Request, token: str | None) -> None:
+        """3D models: for viewers, and for guests walking around on /play (1.7)."""
+        given = _bearer(request) or token
+        if not (hub.viewer_allowed(given) or hub.guest_password_ok(given)):
             await asyncio.sleep(AUTH_FAILURE_DELAY)
             raise HTTPException(401, "wrong viewer password")
 
@@ -350,10 +381,27 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             await conn.close()
 
     @app.websocket(f"{API_PREFIX}/ws/viewer")
-    async def viewer_socket(ws: WebSocket, token: str | None = Query(default=None)):
+    async def viewer_socket(ws: WebSocket, token: str | None = Query(default=None),
+                            guest: bool = Query(default=False)):
         await ws.accept()
         password = token  # 1.0 style: ?token= in the URL
-        if password is None and hub.viewer_password_required:
+        as_guest = None
+        if guest:  # 1.7: a guest's 3D view on /play, filtered to what that guest perceives
+            await ws.send_json({"type": AUTH_REQUIRED, "protocol": PROTOCOL_VERSION})
+            try:
+                msg = await asyncio.wait_for(ws.receive_json(), REGISTER_TIMEOUT)
+            except Exception:
+                await ws.close(4400)
+                return
+            if isinstance(msg, dict) and msg.get("type") == VIEWER_AUTH:
+                as_guest = hub.guest_viewer(msg.get("guest_password"), msg.get("name"))
+            if as_guest is None:
+                await asyncio.sleep(AUTH_FAILURE_DELAY)
+                await ws.send_json({"type": ERROR, "reason": "unauthorized",
+                                    "message": "Join first (on the AI socket) with the guest password and your name."})
+                await ws.close(4401)
+                return
+        elif password is None and hub.viewer_password_required:
             # 1.1: ask for the password as a message, so it never appears in URLs or access logs.
             await ws.send_json({"type": AUTH_REQUIRED, "protocol": PROTOCOL_VERSION})
             try:
@@ -363,14 +411,14 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                 return
             if isinstance(msg, dict) and msg.get("type") == VIEWER_AUTH:
                 password = msg.get("password")
-        if not hub.viewer_allowed(password):
+        if as_guest is None and not hub.viewer_allowed(password):
             await asyncio.sleep(AUTH_FAILURE_DELAY)
             await ws.send_json({"type": ERROR, "reason": "unauthorized", "message": "Wrong viewer password."})
             await ws.close(4401)
             return
         conn = Connection(ws)
-        conn.send({"type": WORLD_STATE, "protocol": PROTOCOL_VERSION, "server_version": SERVER_VERSION,
-                   **hub.world.world_state()})
+        conn.as_guest = as_guest
+        conn.send(hub.world_state_for(conn))
         hub.viewers.add(conn)
         try:
             while True:
@@ -638,7 +686,7 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
 
     @app.get(f"{API_PREFIX}/world/files/{{path:path}}")
     async def world_file(request: Request, path: str, token: str | None = Query(default=None)):
-        await require_viewer(request, token)
+        await require_viewer_or_guest(request, token)
         # 3D models named in the world config, and nothing else from the world directory.
         config = hub.world.config
         world_dir = config.world_dir.resolve() if config.world_dir else None

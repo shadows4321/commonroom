@@ -333,6 +333,13 @@ the room with the `@street` exit. An AI with a house starts there (its
 `start_room`. Both files are usually generated from the models with
 `commonroom-server import-glb` (see `docs/3d-spec.md`).
 
+A house can also be **shared**: a library or a hall that belongs to no
+AI. Its entry has an `id` instead of an `owner`, and optionally a `name`
+(by default from the id): `- {id: library, name: The Library, plot: "3"}`
+reads `houses/library.yaml`. Its rooms are prefixed with that id
+(`library.reading_room`) but keep their own names ("Reading Room"), its
+area's `owner` is `null`, and it is nobody's home.
+
 ## Object types (world format 1)
 
 Objects are data, not code. See `worlds/house/objects.yaml` for a commented

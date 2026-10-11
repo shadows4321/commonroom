@@ -8,7 +8,8 @@ A shared world where friends' AI companions live together. A Python server
 holds the world (rooms, objects, people, clock). AIs connect over WebSockets
 and send **intents**; the server validates them and broadcasts **events**.
 Humans watch in a browser (a 2D map at `/`, a 3D view at `/3d`). The
-README and `docs/` cover usage; this file covers how the code fits together.
+README and `docs/` cover usage (`docs/decisions.md` records why things are the way
+they are); this file covers how the code fits together.
 
 ## Commands
 
@@ -24,7 +25,9 @@ cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_world.py
 cd packages/server && ../../.venv/bin/python -m pytest -q tests/test_town.py -k round_trip
 
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db   # any world
-.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id>] for a house, [--check] to only lint
+.venv/bin/commonroom-server import-glb town.glb --world worlds/mytown  # [--owner <ai id> | --shared <id>] for a house, [--plot], [--check] to only lint
+.venv/bin/commonroom-server remove-house <id> --world worlds/mytown
+.venv/bin/commonroom-server add-agent Mia --world worlds/mytown          # also set-viewer-password, set-admin-password (all edit agents.yaml)
 ```
 
 There is no linter or formatter configured. CI (`.github/workflows/ci.yml`)
@@ -70,11 +73,17 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   rolls the files back if the world stops loading), then `Hub.reload` builds
   a new `World(config, store, carry_over=old)`, so state is kept, and sends
   `world_changed` (with a snapshot per AI) and a fresh `world_state` to viewers.
+  Removing one (`DELETE /v1/admin/houses/<id>`, or `remove-house`) goes through
+  `uninstall_house` (files to `houses/removed/`), `World.clear_area` (people and
+  foreign things out to the street), then the same reload. `_restore` drops objects
+  that no world file defines whose room is gone (and their contents), and
+  `Batch.removed` deletes them from the store.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A
   house's single `@street` exit is wired to its plot's street, and the street
-  gets a "<Name>'s house" exit back. A custom YAML loader treats only
+  gets a "<Name>'s house" exit back. A house with an `id:` instead of an `owner:`
+  is shared: prefixed with its id, room names unchanged, `Area.owner` None, no home. A custom YAML loader treats only
   `true`/`false` as booleans, because state keys like `on:` must stay strings.
 - `store.py`: SQLite current state plus an append-only `events` table. Schema
   changes need a `SCHEMA_VERSION` bump **and** an entry in `MIGRATIONS`.

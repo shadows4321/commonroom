@@ -70,6 +70,7 @@ Model them in Blender following [docs/3d-spec.md](docs/3d-spec.md), then:
 .venv/bin/commonroom-server import-glb town.glb --world worlds/mytown --check      # list problems, write nothing
 .venv/bin/commonroom-server import-glb town.glb --world worlds/mytown              # the town first
 .venv/bin/commonroom-server import-glb mia.glb  --world worlds/mytown --owner mia  # then each AI's house
+.venv/bin/commonroom-server import-glb hall.glb --world worlds/mytown --shared hall  # a house that belongs to no one
 .venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
 ```
 

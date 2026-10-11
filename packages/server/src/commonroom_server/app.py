@@ -23,7 +23,7 @@ from commonroom_protocol import (
 from . import avatars
 from .avatars import AvatarError, AvatarLimits, AvatarStore
 from .config import AgentsConfig, AgentSpec, ConfigError, WorldConfig, load_world
-from .scene_import import ImportProblem, install_house
+from .scene_import import ImportProblem, install_house, uninstall_house
 from .store import Store
 from .world import Batch, Failure, World
 
@@ -426,8 +426,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             "counts": {"rooms": len(world.rooms), "objects": len(world.objects), "people": len(world.entities)},
             "can_add_houses": world.config.world_dir is not None and bool(world.config.plots),
             "plots": [{"id": pid, "street": street, "street_name": world.rooms[street].name if street in world.rooms else None,
-                       "owner": next((a.owner for a in world.config.areas.values() if a.plot == pid), None)}
-                      for pid, street in world.config.plots.items()],
+                       "owner": house.owner if house else None,
+                       "house": house.id if house else None, "house_name": house.name if house else None}
+                      for pid, street in world.config.plots.items()
+                      for house in [next((a for a in world.config.areas.values() if a.plot == pid), None)]],
             "rooms": [{"id": r.id, "name": r.name, "area": r.area} for r in world.rooms.values()],
             "agents": people,
         }
@@ -490,11 +492,14 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
 
     @app.post(f"{API_PREFIX}/admin/houses/{{owner}}")
     async def admin_house(request: Request, owner: str, plot: str | None = Query(default=None),
-                          check: bool = Query(default=False)):
+                          check: bool = Query(default=False), shared: bool = Query(default=False),
+                          name: str | None = Query(default=None)):
         """Add (or rebuild) an AI's house from a .glb in the request body, then load the changed
-        world without a restart. ?plot= picks the plot for a new house; ?check=true only reports."""
+        world without a restart. ?plot= picks the plot for a new house; ?check=true only reports.
+        With ?shared=true, `owner` is the id of a shared house that belongs to no AI (?name= names a new one)."""
         await require_admin(request)
-        spec = admin_agent(owner)
+        spec = None if shared else admin_agent(owner)
+        hid = owner if shared else spec.id
         world_dir = hub.world.config.world_dir
         if world_dir is None or not hub.world.config.plots:
             return _problem(409, "not_a_town", "This world has no plots for houses: import a town model first.")
@@ -510,7 +515,8 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                 glb = Path(tmp) / "house.glb"
                 glb.write_bytes(bytes(body))
                 try:
-                    house = await asyncio.to_thread(install_house, world_dir, glb, spec.id, plot, not check)
+                    house = await asyncio.to_thread(install_house, world_dir, glb, hid, plot, not check,
+                                                    shared, (name or "").strip() or None)
                 except ImportProblem as exc:
                     return _problem(422, "bad_model", str(exc))
             if not check:
@@ -518,12 +524,46 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                     config = await asyncio.to_thread(load_world, world_dir)
                 except ConfigError as exc:  # changed on disk by hand meanwhile; the files are fine, so say so
                     return _problem(500, "reload_failed", f"The house was saved, but the world didn't reload: {exc}")
-                name = hub.world.entities[spec.id].name if spec.id in hub.world.entities else spec.name
-                hub.reload(config, f"{name}'s house has been built." if house.new else f"{name}'s house has been rebuilt.")
-                log.info("admin %s %s's house on plot %s", "added" if house.new else "rebuilt", spec.id, house.plot)
-        return {"house": {"owner": house.owner, "plot": house.plot, "rooms": house.rooms, "objects": house.objects,
+                if shared:
+                    what = config.areas[hid].name if hid in config.areas else hid
+                else:
+                    what = (hub.world.entities[hid].name if hid in hub.world.entities else spec.name) + "'s house"
+                hub.reload(config, f"{what} has been built." if house.new else f"{what} has been rebuilt.")
+                log.info("admin %s house %s on plot %s", "added" if house.new else "rebuilt", hid, house.plot)
+        return {"house": {"owner": None if shared else house.owner, "id": hid, "shared": shared, "plot": house.plot,
+                          "rooms": house.rooms, "objects": house.objects,
                           "new": house.new, "warnings": house.warnings, "written": house.written},
                 "status": admin_status()}
+
+    @app.delete(f"{API_PREFIX}/admin/houses/{{house_id}}")
+    async def admin_remove_house(request: Request, house_id: str):
+        """Take a house down and free its plot, without a restart. Anyone inside walks out to
+        the street; the house's own things go with it; its files move to houses/removed/."""
+        await require_admin(request)
+        area = hub.world.config.areas.get(house_id)
+        world_dir = hub.world.config.world_dir
+        if area is None or area.kind != "house" or world_dir is None:
+            return _problem(404, "no_such_house", f"There is no house {house_id!r}.")
+        async with house_lock:
+            try:
+                moved = await asyncio.to_thread(uninstall_house, world_dir, house_id)
+            except ImportProblem as exc:
+                return _problem(409, "cant_remove", str(exc))
+            try:
+                config = await asyncio.to_thread(load_world, world_dir)
+            except ConfigError as exc:
+                return _problem(500, "reload_failed", f"The house was taken out, but the world didn't reload: {exc}")
+            street = hub.world.config.plots.get(str(area.plot))
+            out = street if street in config.rooms else config.settings.start_room
+            if area.owner:
+                owner = hub.world.entities.get(area.owner)
+                what = f"{owner.name if owner else area.owner.replace('_', ' ').title()}'s house"
+            else:
+                what = area.name
+            hub.world.clear_area(house_id, out)
+            hub.reload(config, f"{what} has been taken down.")
+            log.info("admin removed house %s from plot %s", house_id, area.plot)
+        return {"removed": {"id": house_id, "plot": area.plot, "files": moved}, "status": admin_status()}
 
     @app.get(f"{API_PREFIX}/world/files/{{path:path}}")
     async def world_file(request: Request, path: str, token: str | None = Query(default=None)):

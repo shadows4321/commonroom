@@ -26,6 +26,7 @@ worlds/town/
   town.glb              the shared town: roads, square, shared buildings, empty plots
   houses/
     mia.glb             one house per AI, named after its id in agents.yaml
+    library.glb         or a shared house that belongs to no one (import-glb --shared library)
     otto.glb
     ...
 ```
@@ -246,7 +247,7 @@ and the person you follow.
   (street lamps under `when:lit=true`), at the strengths in [Lights](#lights).
 - **Budget:** about **150k triangles and 25 MB** for the whole town.
 
-## A house (`houses/<ai id>.glb`)
+## A house (`houses/<ai id>.glb`, or `houses/<id>.glb` for a shared one)
 
 - **Origin = the centre of the plot**, ground level. The house and its
   garden stay inside **X −8…+8, Y −8…+8**, and under **12 m tall**.
@@ -254,7 +255,7 @@ and the person you follow.
   view (numpad 1). The road is beyond the −Y edge. Keep a clear, straight
   path from the middle of the front edge (0, −8) to the front door.
 - **Rooms use short local ids** (`room:kitchen`, `room:hall`). The server
-  prefixes them with the owner (`mia.kitchen`), so every house can use
+  prefixes them with the owner, or a shared house's id (`mia.kitchen`), so every house can use
   the same names. A front garden or yard is a room too (`room:garden`).
 - **The way out:** exactly one exit labelled `out`, for example
   `exit:garden:out` near the front edge. It connects to the plot's gate

@@ -209,17 +209,33 @@ let checked = null; // the check result for houseFile with the owner and plot ch
 function renderHouses(data) {
   if (!data.can_add_houses) return;
   const names = Object.fromEntries(data.agents.map((a) => [a.id, a.name]));
-  $("plots").replaceChildren(...data.plots.map((p) => el("li", { className: p.owner ? "" : "free" },
-    el("div", { textContent: p.owner ? `${names[p.owner] || p.owner}'s house` : "Empty plot" }),
-    el("div", { className: "sub", textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` }))));
+  $("plots").replaceChildren(...data.plots.map((p) => {
+    const label = p.owner ? `${names[p.owner] || p.owner}'s house` : p.house ? `${p.house_name} (shared)` : "Empty plot";
+    let remove = null;
+    if (p.house) {
+      remove = el("button", { type: "button", className: "small-btn danger plot-remove", textContent: "Remove" });
+      remove.setAttribute("aria-label", `Remove ${label}`);
+      remove.onclick = () => removeHouse(p, label, remove);
+    }
+    return el("li", { className: p.house ? "" : "free" },
+      el("div", { className: "plot-head" }, el("span", { textContent: label }), remove),
+      el("div", { className: "sub", textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` }));
+  }));
 
   const owner = $("house-owner");
   const ownerWas = owner.value;
   const houseOf = Object.fromEntries(data.plots.filter((p) => p.owner).map((p) => [p.owner, p.id]));
-  owner.replaceChildren(...data.agents.filter((a) => a.in_agents_file).map((a) => el("option", {
-    value: a.id, textContent: houseOf[a.id] ? `${a.name} (rebuild their house)` : a.name })));
+  // Shared houses belong to no AI: their option values are "shared:<id>", and "shared:" is a new one.
+  const sharedPlots = data.plots.filter((p) => p.house && !p.owner);
+  for (const p of sharedPlots) houseOf[`shared:${p.house}`] = p.id;
+  owner.replaceChildren(
+    ...data.agents.filter((a) => a.in_agents_file).map((a) => el("option", {
+      value: a.id, textContent: houseOf[a.id] ? `${a.name} (rebuild their house)` : a.name })),
+    ...sharedPlots.map((p) => el("option", { value: `shared:${p.house}`, textContent: `${p.house_name} (rebuild the shared house)` })),
+    el("option", { value: "shared:", textContent: "A new shared house…" }));
   // Default to the first AI without a house: that's usually who the new model is for.
   owner.value = ownerWas || (data.agents.find((a) => a.in_agents_file && !houseOf[a.id]) || {}).id || owner.value;
+  $("house-name-label").hidden = owner.value !== "shared:";
 
   const plot = $("house-plot");
   const plotWas = plot.value;
@@ -227,7 +243,7 @@ function renderHouses(data) {
   if (mine) {
     plot.replaceChildren(el("option", { value: "", textContent: `Plot ${mine} (their plot)` }));
   } else {
-    const free = data.plots.filter((p) => !p.owner);
+    const free = data.plots.filter((p) => !p.house);
     plot.replaceChildren(el("option", { value: "", textContent: free.length ? "First empty plot" : "No empty plots" }),
       ...free.map((p) => el("option", { value: p.id, textContent: `Plot ${p.id}${p.street_name ? ` · ${p.street_name}` : ""}` })));
     if ([...plot.options].some((o) => o.value === plotWas)) plot.value = plotWas;
@@ -235,11 +251,51 @@ function renderHouses(data) {
   plot.disabled = Boolean(mine);
 }
 
+async function removeHouse(p, label, button) {
+  const out = p.street_name || "the street";
+  if (!confirm(`Take down ${label} on plot ${p.id}?\n\nAnyone inside walks out to ${out}, the house's own things `
+    + "go with it, and the plot becomes empty. Its files are kept in houses/removed/ in the world folder.")) return;
+  clearHouseMessages();
+  button.disabled = true;
+  try {
+    const { res, data } = await api("DELETE", `/houses/${encodeURIComponent(p.house)}`);
+    if (res.status === 401) return signOut();
+    if (!res.ok) {
+      show("house-error", data.message || data.detail || `The server said ${res.status}.`);
+      button.disabled = false;
+      return;
+    }
+    render(data.status);
+    show("house-done", `Took down ${label}. Plot ${p.id} is empty now.`);
+  } catch {
+    show("house-error", "Couldn't reach the server.");
+    button.disabled = false;
+  }
+}
+
 function houseQuery(check) {
   const q = new URLSearchParams();
   if ($("house-plot").value) q.set("plot", $("house-plot").value);
   if (check) q.set("check", "true");
-  return `/houses/${encodeURIComponent($("house-owner").value)}?${q}`;
+  let id = $("house-owner").value;
+  if (id.startsWith("shared:")) {
+    q.set("shared", "true");
+    id = id.slice("shared:".length);
+    if (!id) {
+      q.set("name", sharedName());
+      id = sharedId();
+    }
+  }
+  return `/houses/${encodeURIComponent(id)}?${q}`;
+}
+
+function sharedName() {
+  return $("house-name").value.trim();
+}
+
+/** A new shared house's id, from its name: "The Old Library" -> "the_old_library". */
+function sharedId() {
+  return sharedName().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 async function sendHouse(check) {
@@ -265,6 +321,10 @@ async function checkHouse() {
   checked = null;
   $("house-send").disabled = true;
   if (!houseFile) return;
+  if ($("house-owner").value === "shared:" && !sharedId()) {
+    show("house-error", "Give the shared house a name first.");
+    return;
+  }
   if (!/\.glb$/i.test(houseFile.name) && houseFile.type !== "model/gltf-binary") {
     show("house-error", "That isn't a .glb file. Export the house from Blender as glTF Binary (.glb).");
     return;
@@ -284,16 +344,18 @@ async function checkHouse() {
     return;
   }
   const h = reply.data.house;
-  const who = $("house-owner").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") || h.owner;
+  const who = h.shared ? (sharedName() || $("house-owner").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") || h.id)
+    : $("house-owner").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") || h.owner;
+  const house = h.shared ? who : `${who}'s house`;
   show("house-report", `${houseFile.name}: ${h.rooms} room${h.rooms === 1 ? "" : "s"} and ${h.objects} `
-    + `object${h.objects === 1 ? "" : "s"}, for ${who} on plot ${h.plot}.`
-    + (h.new ? "" : " This replaces their current house; names, descriptions and object types you edited are kept."));
+    + `object${h.objects === 1 ? "" : "s"}, ${h.shared ? `the shared house ${who}` : `for ${who}`} on plot ${h.plot}.`
+    + (h.new ? "" : ` This replaces ${h.shared ? "the" : "their"} current house; names, descriptions and object types you edited are kept.`));
   if (h.warnings.length) {
     $("house-warnings").replaceChildren(...h.warnings.map((w) => el("li", { textContent: w })));
     $("house-warnings").hidden = false;
   }
   checked = h;
-  $("house-send").textContent = h.new ? `Build ${who}'s house` : `Rebuild ${who}'s house`;
+  $("house-send").textContent = h.new ? `Build ${house}` : `Rebuild ${house}`;
   $("house-send").disabled = false;
 }
 
@@ -306,6 +368,12 @@ function chooseHouse(file) {
 $("house-file").onchange = () => chooseHouse($("house-file").files[0] || null);
 $("house-owner").onchange = () => { renderHouses(status); checkHouse(); };
 $("house-plot").onchange = () => checkHouse();
+let nameTimer = null;
+$("house-name").oninput = () => { // re-check once typing pauses (not on blur, which would swallow a click on Build)
+  $("house-send").disabled = true;
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(checkHouse, 400);
+};
 
 // Drop a .glb anywhere on the page once signed in.
 let dragDepth = 0;
@@ -352,6 +420,11 @@ $("house-send").onclick = async () => {
   }
   const h = reply.data.house;
   render(reply.data.status);
+  if (h.shared) { // now an existing shared house: select it, so dropping another model rebuilds it
+    $("house-owner").value = `shared:${h.id}`;
+    $("house-name").value = "";
+    renderHouses(status);
+  }
   show("house-done", `${h.new ? "Built" : "Rebuilt"} the house on plot ${h.plot}. Everyone watching sees it now.`);
   houseFile = null;
   checked = null;

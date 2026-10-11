@@ -87,9 +87,10 @@ class Batch:
     events: list[Event] = field(default_factory=list)
     entities: dict[str, Entity] = field(default_factory=dict)
     objects: dict[str, Obj] = field(default_factory=dict)
+    removed: set[str] = field(default_factory=set)  # object ids that no longer exist
 
     def __bool__(self) -> bool:
-        return bool(self.events or self.entities or self.objects)
+        return bool(self.events or self.entities or self.objects or self.removed)
 
 
 class World:
@@ -135,6 +136,15 @@ class World:
         for o in data["objects"]:
             if o.type in self.types:
                 self.objects[o.id] = o
+        # Objects no world file defines any more, whose room is gone too (a house was taken
+        # down), go with it, and so does whatever was inside them. Carried ones stay.
+        defined = {spec.id for spec in self.config.objects}
+        while gone := [o for o in self.objects.values() if o.id not in defined and (
+                (o.loc_kind == "room" and o.loc_id not in self.rooms) or
+                (o.loc_kind == "container" and o.loc_id not in self.objects))]:
+            for o in gone:
+                del self.objects[o.id]
+                self._pending.removed.add(o.id)
         for e in self.entities.values():
             on = self.objects.get(e.pose["object"]) if e.pose else None
             if e.pose and (on is None or on.loc_kind != "room" or on.loc_id != e.room
@@ -483,6 +493,23 @@ class World:
                                         "entity_view": self.entity_view(e)})
         for held in self.held_by(e.id):
             self._touch(held)
+
+    def clear_area(self, area_id: str, to_room: str) -> None:
+        """Empty a house that's about to be taken down: everyone inside walks out to `to_room`,
+        and so does anything brought in from elsewhere. The house's own things are dropped
+        when the world reloads without it (see _restore); someone carrying one keeps it."""
+        rooms = {r.id for r in self.rooms.values() if r.area == area_id}
+        for e in self.entities.values():
+            if e.room in rooms:
+                self.teleport(e.id, to_room)
+        prefix = f"{area_id}."
+        for o in self.objects.values():
+            if o.loc_kind == "room" and o.loc_id in rooms and not o.id.startswith(prefix):
+                o.loc_id = to_room
+                self._touch(o)
+            elif o.loc_kind == "container" and o.loc_id.startswith(prefix) and not o.id.startswith(prefix):
+                o.loc_kind, o.loc_id = "room", to_room
+                self._touch(o)
 
     def any_online(self) -> bool:
         return any(e.online for e in self.entities.values())

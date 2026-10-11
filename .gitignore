@@ -16,4 +16,5 @@ dist/
 !/worlds/town/
 !/worlds/house/
 worlds/*/agents.yaml
+worlds/*/houses/removed/
 /avatars/

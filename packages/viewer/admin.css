@@ -39,10 +39,13 @@ button.small-btn:disabled { opacity: .45; cursor: default; }
 .plots li.free { border-style: dashed; color: var(--muted); }
 .house-form { display: flex; gap: 12px; flex-wrap: wrap; }
 .house-form label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.house-form select {
+.house-form label[hidden] { display: none; }
+.house-form select, .house-form input {
   font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line);
   background: var(--bg); color: var(--ink); max-width: 220px;
 }
 .warnings { margin: 0; padding-left: 18px; font-size: 13px; color: var(--shout); }
 .warnings[hidden] { display: none; }
 body.dragging .drop { border-color: var(--accent); background: var(--room-active); }
+.plot-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+button.plot-remove { padding: 1px 6px; font-size: 12px; }

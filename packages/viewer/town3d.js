@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { createMinimap } from "./minimap.js";
 
 const PROTOCOL_MAJOR = 1;
 const WALK_SPEED = 2.2; // m/s
@@ -355,6 +356,11 @@ async function buildWorld() {
   const rawName = (n) => n.userData.name || n.name || "";
   for (const list of model.seats.values()) list.sort((a, b) => rawName(a).localeCompare(rawName(b)));
   model.loaded = true;
+  minimap.build([...model.floors].map(([id, meshes]) => {
+    const room = state.rooms.get(id);
+    const area = state.areas.get(room?.area);
+    return { id, name: room?.name || id, area: room?.area, house: area?.kind === "house" ? (state.entities.get(area.owner)?.name || area.name) : null, meshes };
+  }));
   frameAll();
   if (state.clock) applyTime(state.clock);
   for (const o of state.objects.values()) applyObject(o);
@@ -819,6 +825,32 @@ function follow(id) {
 
 $("overview").onclick = () => { following = null; frameAll(); renderPeople(); updateCutaway(); };
 
+/** Look at a point on the ground (a click on the map), keeping the camera's angle. */
+function lookAt(x, z) {
+  following = null;
+  const offset = camera.position.clone().sub(controls.target);
+  if (offset.length() > 40) offset.setLength(22);
+  controls.target.set(x, 0, z);
+  camera.position.copy(controls.target).add(offset);
+  renderPeople();
+  updateCutaway();
+}
+
+const minimap = createMinimap({
+  host: $("minimap"),
+  people: () => [...characters.values()].filter((ch) => ch.group.visible).map((ch) => {
+    const e = state.entities.get(ch.id);
+    return {
+      id: ch.id, name: e?.name || ch.id, offline: !e?.online,
+      x: ch.group.position.x, z: ch.group.position.z, color: `#${colorFor(ch.id).getHexString()}`,
+    };
+  }),
+  view: () => ({ target: controls.target, camera: camera.position }),
+  following: () => following,
+  onFollow: (id) => follow(id),
+  onLook: lookAt,
+});
+
 function updateCutaway() {
   const inside = new Set();
   const e = following && state.entities.get(following);
@@ -953,6 +985,7 @@ renderer.setAnimationLoop((now) => {
   }
   controls.update();
   if (now - lastFade > 150) { lastFade = now; fadeWalls(); } // time-based, so slow devices don't lag behind
+  minimap.draw(now, following && state.entities.get(following)?.room);
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
@@ -967,4 +1000,7 @@ if (params.has("token")) {
 connect();
 
 // For automated checks (and curious people in the console).
-window.commonroom3d = { state, model, characters, scene, camera, follow, applyTime, fadeWalls, get following() { return following; } };
+window.commonroom3d = {
+  state, model, characters, scene, camera, controls, follow, lookAt, minimap, applyTime, fadeWalls,
+  get following() { return following; },
+};

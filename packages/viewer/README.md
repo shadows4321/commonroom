@@ -41,6 +41,10 @@ Served at `/3d`. It renders the same stream with three.js:
 - **Following someone** hides `ext:`/`ceiling:` of the building they're
   in and fades `wall:` meshes between the camera and them.
 
+- **Map** (`minimap.js`, bottom left): the floors from above, everyone as a dot
+  and a wedge for the camera. Click a dot to follow that person, or a place to
+  look there. It can be folded away (remembered on the device).
+
 `window.commonroom3d` exposes the scene and state, for debugging.
 
 ## Avatar page (`avatar.html`, `avatar.js`)

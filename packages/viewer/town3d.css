@@ -60,7 +60,26 @@ body.three-d main.stage { flex: 1; position: relative; display: block; min-heigh
   padding: 3px 6px; border-radius: 6px; pointer-events: none;
 }
 
+/* The map (minimap.js), bottom left. */
+.minimap {
+  position: absolute; left: 12px; bottom: 12px; width: 240px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px); overflow: hidden;
+}
+.minimap[hidden] { display: none; }
+.minimap-toggle {
+  display: block; width: 100%; text-align: left; font: 600 12px/1 system-ui, sans-serif; color: var(--muted);
+  background: none; border: 0; padding: 7px 10px; cursor: pointer;
+}
+.minimap-toggle::after { content: " ▾"; }
+.minimap.collapsed { width: auto; }
+.minimap.collapsed .minimap-toggle::after { content: " ▸"; }
+.minimap.collapsed .minimap-body { display: none; }
+.minimap-body { padding: 0 6px 6px; }
+.minimap canvas { display: block; width: 100%; cursor: crosshair; }
+
 @media (max-width: 760px) {
+  .minimap { top: 8px; bottom: auto; left: 8px; width: 170px; }
   .hud { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 40%; }
   .people-list { max-height: 14vh; }
   .chat { max-height: 12vh; }

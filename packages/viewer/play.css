@@ -1,0 +1,91 @@
+/* The /play page; colours, the header and the join card come from viewer.css. */
+body.play-page { overflow: hidden; }
+.login-card input[type="text"] {
+  font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.login-card input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.card h3 {
+  margin: 10px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+}
+.card h3:first-child { margin-top: 0; }
+.muted { color: var(--muted); }
+.here-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.here-head h2 { font-size: 18px; }
+.here p { margin: 6px 0; }
+.you-line { font-size: 13px; color: var(--muted); }
+
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .composer select, .goto select, .items select {
+  font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.btn { cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.08); }
+.btn.small { font-size: 12px; padding: 2px 8px; }
+
+.goto { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.goto select { flex: 1; min-width: 0; }
+
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.items > li { display: flex; flex-direction: column; gap: 4px; }
+.items .title { font-weight: 600; }
+.items .title .muted { font-weight: 400; }
+.items .desc { font-size: 13px; color: var(--muted); }
+.items .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.items .inside { margin: 2px 0 0 12px; font-size: 13px; }
+.items .empty { color: var(--muted); font-size: 13px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; color: var(--muted); margin-left: 4px; }
+
+.chat-card { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.play-log { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 12px 14px; }
+.play-log li { padding: 3px 0; }
+.play-log .when { color: var(--muted); font-size: 11px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.play-log .speaker { font-weight: 600; }
+.play-log .system { color: var(--muted); }
+.play-log .whisper { color: var(--whisper); font-style: italic; }
+.play-log .shout { color: var(--shout); font-weight: 600; }
+.play-log .private { color: var(--accent); }
+.play-log .failed { color: var(--shout); }
+.play-log .mine .speaker { color: var(--accent); }
+.composer { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.composer input {
+  flex: 1; min-width: 0; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.composer input:focus, .goto select:focus, .composer select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The 3D stage with the panels over it: where you are (left), the town and the info card
+   (right, from town3d.css), the conversation (bottom right) and the map (bottom left). */
+.play-stage[hidden] { display: none; }
+.play-panel {
+  position: absolute; top: 12px; left: 12px; width: 330px; max-height: calc(100% - 290px); min-height: 160px;
+  display: flex; flex-direction: column; gap: 8px; overflow-y: auto; z-index: 2;
+}
+body.panel-hidden .play-panel { display: none; }
+.play-panel .card { padding: 10px 12px; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); }
+.hint { font-size: 12px; margin: 8px 0 0 !important; }
+.play-3d .hud { max-height: calc(100% - 42vh - 36px); }
+.play-chat {
+  position: absolute; right: 12px; bottom: 12px; width: min(420px, calc(100% - 370px)); height: 40vh; z-index: 2;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px);
+}
+.play-3d .minimap { z-index: 2; }
+
+@media (max-width: 760px) {
+  body.play-page { overflow: auto; }
+  .play-stage { display: flex; flex-direction: column; overflow: visible; min-height: auto; flex: none; }
+  .play-stage .canvas-host { position: relative; height: 55vh; flex: none; }
+  .play-panel, .play-3d .hud, .play-chat, .play-3d .minimap {
+    position: static; width: auto; max-height: none; height: auto; margin: 8px 8px 0;
+  }
+  .play-chat { min-height: 50vh; margin-bottom: 8px; }
+  .play-3d .minimap { display: none; }
+  header .clock { display: none; }
+}

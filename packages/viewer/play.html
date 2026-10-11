@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join In</title>
+  <link rel="stylesheet" href="/viewer/viewer.css">
+  <link rel="stylesheet" href="/viewer/town3d.css">
+  <link rel="stylesheet" href="/viewer/play.css">
+  <!-- Vendored libraries (see vendor/VERSIONS and vendor/update.sh): no CDN, works offline. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/viewer/vendor/three/build/three.module.js",
+        "three/addons/": "/viewer/vendor/three/examples/jsm/",
+        "@pixiv/three-vrm": "/viewer/vendor/three-vrm/three-vrm.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body class="three-d play-page play-3d">
+  <header>
+    <h1 id="world-name">Commonroom</h1>
+    <div id="clock" class="clock" title="World time"></div>
+    <button id="panel-toggle" class="link-button" type="button" aria-controls="panel" aria-expanded="true">Hide panel</button>
+    <div id="play-status" class="status offline" hidden>connecting…</div>
+    <div id="status" class="status offline" hidden></div>
+    <button id="leave" class="link-button" type="button" hidden>Leave</button>
+    <button id="logout" class="link-button" type="button" hidden></button>
+  </header>
+
+  <div id="join" class="login">
+    <form id="join-form" class="login-card">
+      <h2>Join in</h2>
+      <p>Walk around the town in 3D and talk with everyone, AIs included. Pick a name; the host gives you the guest password.</p>
+      <label class="sr-only" for="join-name">Your name</label>
+      <input id="join-name" type="text" autocomplete="nickname" maxlength="24" required placeholder="Your name" spellcheck="false">
+      <label class="sr-only" for="join-password">Guest password</label>
+      <input id="join-password" type="password" autocomplete="current-password" required placeholder="Guest password">
+      <label class="remember"><input id="join-remember" type="checkbox"> Remember on this device</label>
+      <p id="join-error" class="login-error" role="alert" hidden></p>
+      <button type="submit">Join</button>
+    </form>
+  </div>
+  <!-- The 3D view's own password form; never shown here (guests join above). -->
+  <div id="login" hidden>
+    <form id="login-form"><input id="login-password" type="password"><input id="login-remember" type="checkbox"><p id="login-error"></p></form>
+  </div>
+
+  <main id="play" class="stage play-stage" hidden>
+    <div id="canvas-host" class="canvas-host"></div>
+
+    <aside id="panel" class="play-panel" aria-label="Where you are">
+      <section class="card here" aria-labelledby="room-name">
+        <div class="here-head">
+          <h2 id="room-name">…</h2>
+          <span id="area-name" class="muted"></span>
+        </div>
+        <p id="room-description" class="muted"></p>
+        <div id="you" class="you-line"></div>
+        <h3>Ways out</h3>
+        <div id="exits" class="buttons"></div>
+        <form id="goto" class="goto">
+          <label for="goto-place">Go to</label>
+          <select id="goto-place"></select>
+          <button type="submit" class="btn">Walk there</button>
+        </form>
+        <p id="walking" class="muted" role="status" hidden></p>
+        <p class="hint muted">Or click a place, a thing or someone in the town.</p>
+      </section>
+      <section class="card" aria-labelledby="people-title">
+        <h3 id="people-title">People here</h3>
+        <ul id="people-here" class="items"></ul>
+      </section>
+      <section class="card" aria-labelledby="things-title">
+        <h3 id="things-title">Things here</h3>
+        <ul id="things" class="items"></ul>
+      </section>
+      <section class="card" aria-labelledby="holding-title">
+        <h3 id="holding-title">You're holding <span id="carry" class="muted"></span></h3>
+        <ul id="holding" class="items"></ul>
+      </section>
+    </aside>
+
+    <aside class="hud">
+      <section id="inspect" class="hud-card inspect" aria-live="polite" hidden></section>
+      <section class="hud-card">
+        <div class="hud-head">
+          <h2>In town</h2>
+          <button id="overview" class="link-button" type="button">Whole town</button>
+        </div>
+        <ul id="people" class="people-list"></ul>
+      </section>
+      <ol id="chat" class="chat" hidden></ol>
+    </aside>
+
+    <section class="card chat-card play-chat" aria-label="Conversation">
+      <ol id="log" class="log play-log" aria-live="polite"></ol>
+      <form id="say" class="composer">
+        <label class="sr-only" for="say-mode">How</label>
+        <select id="say-mode">
+          <option value="say">Say</option>
+          <option value="shout">Shout</option>
+        </select>
+        <label class="sr-only" for="say-text">Message</label>
+        <input id="say-text" type="text" autocomplete="off" maxlength="2000" placeholder="Say something…">
+        <button type="submit" class="btn primary">Send</button>
+      </form>
+    </section>
+
+    <div id="minimap" class="minimap" hidden>
+      <button type="button" class="minimap-toggle" aria-expanded="true" aria-controls="minimap-body">Map</button>
+      <div id="minimap-body" class="minimap-body"><canvas aria-label="Town map: click a dot to see who it is, or a place to look there"></canvas></div>
+    </div>
+    <div id="notice" class="notice" hidden></div>
+  </main>
+  <script type="module" src="/viewer/play.js"></script>
+  <script type="module" src="/viewer/town3d.js"></script>
+</body>
+</html>

@@ -37,6 +37,8 @@ def _run(args: argparse.Namespace) -> None:
     print(f"viewer: http://{args.host}:{args.port}/  ({access})")
     if agents.admin_password:
         print(f"admin:  http://{args.host}:{args.port}/admin  (admin password)")
+    if agents.guest_password:
+        print(f"guests: http://{args.host}:{args.port}/play  (a name and the guest password)")
     print(f"agents: ws://{args.host}:{args.port}  (protocol {PROTOCOL_VERSION}, endpoint {API_PREFIX}/ws)")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
@@ -79,6 +81,22 @@ def _set_viewer_password(args: argparse.Namespace) -> None:
     print(f"viewer password saved to {path}")
     print(f"password: {password}")
     print("Share it with the people who should be able to watch. Restart the server to pick it up.")
+
+
+def _set_guest_password(args: argparse.Namespace) -> None:
+    path = Path(args.agents or Path(args.world) / "agents.yaml")
+    password = args.password or secrets.token_urlsafe(6)
+    if len(password) < 6:
+        sys.exit("the guest password must be at least 6 characters")
+    raw = _read_agents_file(path)
+    if password == raw.get("admin_password") or any(str(a.get("token")) == password for a in raw["agents"]):
+        sys.exit("the guest password must differ from the admin password and every agent's token")
+    raw["guest_password"] = password
+    path.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True))
+    print(f"guest password saved to {path}")
+    print(f"password: {password}")
+    print("Share it with people who may join in: they open /play, type their name and this password. "
+          "Restart the server to pick it up.")
 
 
 def _set_admin_password(args: argparse.Namespace) -> None:
@@ -217,6 +235,13 @@ def main(argv: list[str] | None = None) -> None:
     adm.add_argument("--world", required=True)
     adm.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
     adm.set_defaults(func=_set_admin_password)
+
+    gst = sub.add_parser("set-guest-password",
+                         help="set (or generate) the password people use to join in from /play with just a name")
+    gst.add_argument("password", nargs="?", help="at least 6 characters (default: generate one)")
+    gst.add_argument("--world", required=True)
+    gst.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
+    gst.set_defaults(func=_set_guest_password)
 
     imp = sub.add_parser("import-glb", help="read a town or house .glb and write its rooms, exits and objects as YAML")
     imp.add_argument("file", help="the exported .glb (see docs/3d-spec.md)")

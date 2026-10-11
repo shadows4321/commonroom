@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.6",
+  "$comment": "protocol_version 1.7",
   "$defs": {
     "id": {
       "type": "string",
@@ -276,6 +276,13 @@
         },
         "pose": {
           "$ref": "#/$defs/Pose"
+        },
+        "kind": {
+          "enum": [
+            "ai",
+            "guest"
+          ],
+          "description": "1.7: an AI, or a person who joined from a browser."
         }
       }
     },
@@ -452,12 +459,28 @@
                 "string",
                 "null"
               ]
+            },
+            "guest_password": {
+              "type": "string",
+              "description": "1.7: join as a guest with `name` instead of a token."
             }
           },
           "required": [
             "type",
-            "protocol",
-            "token"
+            "protocol"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "token"
+              ]
+            },
+            {
+              "required": [
+                "guest_password",
+                "name"
+              ]
+            }
           ]
         },
         {
@@ -793,7 +816,25 @@
             "required": [
               "to",
               "to_name"
-            ]
+            ],
+            "properties": {
+              "to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "to_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gone": {
+                "type": "boolean",
+                "description": "1.7: a guest left the world; to and to_name are null."
+              }
+            }
           }
         },
         {
@@ -1089,7 +1130,9 @@
             "bad_request",
             "protocol_mismatch",
             "unauthorized",
-            "replaced"
+            "replaced",
+            "bad_name",
+            "name_taken"
           ]
         },
         "message": {
@@ -1200,6 +1243,13 @@
         },
         "clock": {
           "$ref": "#/$defs/Clock"
+        },
+        "gone": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "description": "1.7: entities that left the world (guests who went home)."
         }
       }
     },

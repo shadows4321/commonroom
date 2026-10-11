@@ -78,6 +78,15 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   foreign things out to the street), then the same reload. `_restore` drops objects
   that no world file defines whose room is gone (and their contents), and
   `Batch.removed` deletes them from the store.
+- Guests: `register` with `guest_password` + `name` (no token) goes through
+  `Hub.guest()`, which makes an `AgentSpec(kind="guest")` with id `guest-<slug>`
+  and refuses AI names and names connected right now. A disconnected guest
+  goes home after `guest_grace` seconds (`World.remove_entity`: `left_room`
+  with `gone`, viewer `update.gone`, row deleted via `Batch.gone`); leftovers
+  are removed at startup. `/play` is the 3D town for a guest: `play.js` acts on
+  the agent socket, and `town3d.js` in play mode uses `/v1/ws/viewer?guest=true`,
+  a viewer connection with `Connection.as_guest` set, whose events (and
+  `recent_events`) are filtered with `visible_to(guest)`, never the full stream.
 - `config.py`: loads world YAML. Format 2 adds towns: shared rooms in
   `world.yaml`, plus `houses:` each in its own file whose room and object ids
   are **prefixed with the owner on load** (`kitchen` → `mia.kitchen`). A

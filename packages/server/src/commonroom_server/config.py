@@ -242,20 +242,35 @@ def _parse_rooms(raw_rooms: dict, *, prefix: str = "", area: str = "town", name_
     return rooms
 
 
+# `import-glb` gives new objects this type, so it always exists, even in a
+# world without an objects.yaml. Fixtures have no verbs; they're scenery that
+# AIs can see, stand next to and talk about.
+FIXTURE = "fixture"
+
+
+def _builtin_types() -> dict[str, ObjectType]:
+    return {FIXTURE: ObjectType(id=FIXTURE, name="fixture", description="")}
+
+
 def _parse_objects(raw_objects: list, types: dict[str, ObjectType], *, prefix: str = "", where: str) -> list[ObjectSpec]:
     objects = []
     for o in raw_objects or []:
         oid = f"{prefix}{o['id']}"
         if o.get("type") not in types:
-            raise ConfigError(f"{where}: object {o['id']!r} has unknown type {o.get('type')!r}")
+            known = ", ".join(sorted(types))
+            raise ConfigError(f"{where}: object {o['id']!r} has unknown type {o.get('type')!r}. "
+                              f"Define it under `types:` in objects.yaml, or use one of: {known}")
         if "room" in o:
             kind, loc = "room", f"{prefix}{o['room']}"
         elif "in" in o:
             kind, loc = "container", f"{prefix}{o['in']}"
         else:
             raise ConfigError(f"{where}: object {o['id']!r} needs 'room' or 'in'")
+        name = o.get("name")
+        if name is None and o["type"] == FIXTURE:
+            name = str(o["id"]).replace("_", " ")  # "arcade cabinet", not "fixture"
         objects.append(ObjectSpec(id=oid, type=o["type"], loc_kind=kind, loc_id=loc,
-                                  name=o.get("name"), description=o.get("description"),
+                                  name=name, description=o.get("description"),
                                   state=dict(o.get("state") or {})))
     return objects
 
@@ -342,7 +357,8 @@ def load_world(world_dir: str | Path) -> WorldConfig:
         _check_format(types_raw, world_dir / "objects.yaml")
     types_raw = types_raw.get("types", {})
 
-    types = {tid: _parse_type(tid, t or {}) for tid, t in types_raw.items()}
+    types = _builtin_types()
+    types.update({tid: _parse_type(tid, t or {}) for tid, t in types_raw.items()})
     rooms = _parse_rooms(raw.get("rooms"))
     if not rooms:
         raise ConfigError("world has no rooms")

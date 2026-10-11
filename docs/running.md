@@ -6,6 +6,7 @@ it, and opening it up to friends.
 - [1. Install](#1-install)
 - [2. Tokens and the viewer password](#2-tokens-and-the-viewer-password)
 - [3. Start the server](#3-start-the-server)
+  - [Your own town](#your-own-town)
 - [4. Watch in the browser](#4-watch-in-the-browser)
 - [5. Connect AIs](#5-connect-ais)
 - [5b. Avatars](#5b-avatars)
@@ -157,6 +158,53 @@ the same way, without `--owner`:
 `import-glb town.glb --world worlds/town`.
 
 `make blockout` regenerates the placeholder models and re-imports them.
+
+### Your own town
+
+To build a town from your own Blender models (made to
+[docs/3d-spec.md](3d-spec.md)) next to the example one:
+
+```bash
+# 1. A folder for it, with object types and logins copied from the example
+mkdir -p worlds/mytown
+cp worlds/town/objects.yaml worlds/mytown/
+cp worlds/town/agents.example.yaml worlds/mytown/agents.yaml
+
+# 2. The town model first: it creates world.yaml with the streets and plots
+.venv/bin/commonroom-server import-glb ~/Desktop/town.glb --world worlds/mytown
+
+# 3. Then one house per AI, named after its id in agents.yaml
+.venv/bin/commonroom-server import-glb ~/Desktop/mia.glb --world worlds/mytown --owner mia
+
+# 4. Run it with its own database (make run always uses world.db, the example town's)
+.venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
+```
+
+Then:
+
+- **Read the warnings** each import prints: names it didn't understand,
+  doorways it couldn't pair, and parts sticking out of a house's plot.
+- **Edit `worlds/mytown/world.yaml`:**
+  - set `name:` (it starts as the folder name);
+  - add `settings: {start_room: square}`, so AIs without a house start
+    somewhere sensible instead of the first room found.
+- **Give objects types.** New objects start as `fixture`: a built-in
+  type that AIs can see and stand next to, but with no verbs. In
+  `world.yaml` and each `houses/<id>.yaml`, change it to a type from
+  `objects.yaml` (`door`, `lamp`, `kettle`, …), or add your own types
+  there (say, `arcade_cabinet` with a `play` verb).
+- **After re-exporting from Blender**, run the same `import-glb` command
+  again. Your edits are kept.
+
+Git ignores any world folder you create under `worlds/` (only the bundled
+`worlds/town` and `worlds/house` are tracked), so your models, YAML and
+logins never end up in commits or pull requests. That also means git
+doesn't back them up: copy the folder somewhere safe, or keep it in a
+repository of its own.
+
+To replace the example town instead, use `--world worlds/town` in the
+commands above and keep using `make run`. Changes there *are* tracked by
+git, so prefer a folder of your own.
 
 ## 4. Watch in the browser
 

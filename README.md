@@ -120,3 +120,10 @@ make test               # protocol, server and SDK test suites
 This project was written by AI (Claude Code). The code, tests and docs were
 generated in AI sessions, with a human setting the goals, reviewing the changes
 and running the test suite.
+
+## License
+
+[MIT](LICENSE). The vendored three.js and three-vrm in `packages/viewer/vendor`
+are MIT too, under their own copyright notices. Avatars people upload keep
+the license their creator gave them (the viewer shows it); this license
+doesn't cover them.

@@ -107,7 +107,14 @@ house models: floors, exits, spots, seats, spawns, plots and gates for placement
 `when:` parts for object state; `time:` parts for time of day;
 `ext:`/`ceiling:`/`wall:` for cutaway. three.js's GLTFLoader strips `:` and
 `.` from names, so always read `node.userData.name`.
-`window.commonroom3d` exposes state for debugging and browser checks.
+Walking between rooms goes out-exit → plot `gate:` → in-exit → standing spot;
+those door points are marked `via`. A new move replaces the rest of a walk,
+except that after a room change the `via` points still ahead are kept, because
+`go_to` sends a move per room faster than characters walk, and dropping them
+cuts through walls and plots. `minimap.js` (the corner map) is plain 2D canvas:
+town3d.js hands it floor meshes, and it keeps only upward-facing triangles.
+`window.commonroom3d` exposes state (including `minimap.roomAt(x, z)`, handy for
+checking a walk stays on floors) for debugging and browser checks.
 Headless Chromium (Playwright, `--use-angle=swiftshader`) renders it at a
 few frames per second, so anything frame-counted is slow there; prefer
 time-based logic.

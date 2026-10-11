@@ -14,7 +14,7 @@ from importlib import metadata
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from commonroom_protocol import (
@@ -708,6 +708,11 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         return FileResponse(path, media_type=avatars.CONTENT_TYPES[name.rsplit(".", 1)[1]],
                             headers={"Cache-Control": "public, max-age=31536000, immutable",
                                      "X-Content-Type-Options": "nosniff"})
+
+    @app.get("/robots.txt", include_in_schema=False)
+    async def robots():
+        # A private world among friends: nothing here is for search engines.
+        return PlainTextResponse("User-agent: *\nDisallow: /\n")
 
     if viewer_dir is not None and Path(viewer_dir).is_dir():
         viewer_dir = Path(viewer_dir)

@@ -147,6 +147,7 @@
 
   function applyUpdate(data) {
     for (const e of data.entities) state.entities.set(e.id, e);
+    for (const id of data.gone || []) { state.entities.delete(id); state.typing.delete(id); } // 1.7: guests who left
     for (const o of data.objects) state.objects.set(o.id, o);
     for (const ev of data.events) {
       if (ev.type === "typing") {
@@ -217,7 +218,7 @@
         img.onerror = () => img.remove(); // fall back to the initial
         avatar.append(img);
       }
-      const name = el("span", state.typing.has(e.id) ? "typing" : null, e.name);
+      const name = el("span", state.typing.has(e.id) ? "typing" : null, e.kind === "guest" ? `${e.name} (guest)` : e.name);
       chip.append(avatar, name);
       const bits = [];
       if (e.pose) bits.push(`${e.pose.kind === "lying" ? "🛏️ lying on" : "🪑 sitting on"} the ${e.pose.name}`); // protocol 1.3
@@ -293,6 +294,7 @@
       case "entered_room":
         return [["system", `${name(ev.entity, ev.entity_name)} entered${ev.from_name ? ` from the ${ev.from_name}` : ""}.`]];
       case "left_room":
+        if (ev.gone) return [["system", `${name(ev.entity, ev.entity_name)} went home.`]]; // 1.7: a guest left
         return [["system", `${name(ev.entity, ev.entity_name)} left for the ${ev.to_name}.`]];
       case "position_changed":
         return [["system", `${name(ev.entity, ev.entity_name)} moved ${ev.near ? `over to ${ev.near.kind === "entity" ? "" : "the "}${ev.near.name}` : "away"}.`]];

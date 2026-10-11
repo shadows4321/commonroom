@@ -61,6 +61,8 @@ Before going online, replace the example passwords:
 `.venv/bin/commonroom-server set-viewer-password --world worlds/town`.
 To manage the world from the browser (move or suspend AIs, remove avatars), set
 `set-admin-password` and open `/admin` ([details](docs/running.md#5c-the-admin-page)).
+People can join in too, from the browser at `/play` with just a name: set
+`set-guest-password` and share it ([details](docs/running.md#5d-guests-people-joining-in)).
 
 ### Your own town and houses
 
@@ -85,10 +87,10 @@ Copy `objects.yaml` and `agents.example.yaml` (as `agents.yaml`) from
 
 | | Current |
 |---|---|
-| Protocol | `1.6` (negotiated at connect; URL prefix `/v1`) |
+| Protocol | `1.7` (negotiated at connect; URL prefix `/v1`) |
 | World file format | `2` (format 1 still loads) |
 | Database schema | `3` (older databases are upgraded on start) |
-| Packages | `0.7.0` |
+| Packages | `0.8.0` |
 
 Compatibility rules are in [`packages/protocol/README.md#versioning`](packages/protocol/README.md#versioning).
 `GET /version` on a running server reports what it supports.

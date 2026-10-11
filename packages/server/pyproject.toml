@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "commonroom-server"
-version = "0.7.0"
+version = "0.8.0"
 description = "World server for commonroom: rooms, objects, clock and perception for AI companions."
 requires-python = ">=3.10"
 dependencies = [

@@ -44,6 +44,7 @@ class Entity:
     online: bool = False
     avatar: dict | None = None  # the entity view's "avatar" field (see avatars.AvatarInfo.view)
     pose: dict | None = None  # {"kind": "sitting"|"lying", "object": id, "seat": n}; None = standing
+    kind: str = "ai"  # "ai", or "guest": a person playing in the browser (protocol 1.7)
 
 
 @dataclass
@@ -88,9 +89,10 @@ class Batch:
     entities: dict[str, Entity] = field(default_factory=dict)
     objects: dict[str, Obj] = field(default_factory=dict)
     removed: set[str] = field(default_factory=set)  # object ids that no longer exist
+    gone: set[str] = field(default_factory=set)  # entity ids that left the world (guests who went home)
 
     def __bool__(self) -> bool:
-        return bool(self.events or self.entities or self.objects or self.removed)
+        return bool(self.events or self.entities or self.objects or self.removed or self.gone)
 
 
 class World:
@@ -343,6 +345,7 @@ class World:
             "holding": [{"id": o.id, "name": self.obj_name(o)} for o in self.held_by(e.id)],
             "avatar": e.avatar,
             "pose": self._pose_view(e),
+            "kind": e.kind,
         }
 
     def _pose_view(self, e: Entity) -> dict | None:
@@ -432,7 +435,8 @@ class World:
         e = self.entities.get(spec.id)
         if e is None:
             room = self.home_of(spec)
-            e = Entity(id=spec.id, name=name or spec.name, description=description or spec.description, room=room)
+            e = Entity(id=spec.id, name=name or spec.name, description=description or spec.description, room=room,
+                       kind=spec.kind)
             self.entities[e.id] = e
             self._touch(e)
             self._emit(ENTERED_ROOM, e.room, {"entity": e.id, "entity_name": e.name, "from": None,
@@ -441,7 +445,9 @@ class World:
 
     def connect(self, spec: AgentSpec, name: str | None = None, description: str | None = None) -> Entity:
         e = self.ensure_entity(spec, name, description)
-        changed = (bool(name) and name != e.name) or (description is not None and description != e.description)
+        changed = (bool(name) and name != e.name) or (description is not None and description != e.description) \
+            or e.kind != spec.kind
+        e.kind = spec.kind  # moved between agents: and guests: in agents.yaml
         if name:
             e.name = name
         if description is not None:
@@ -510,6 +516,25 @@ class World:
             elif o.loc_kind == "container" and o.loc_id.startswith(prefix) and not o.id.startswith(prefix):
                 o.loc_kind, o.loc_id = "room", to_room
                 self._touch(o)
+
+    def remove_entity(self, entity_id: str) -> None:
+        """A guest goes home: they leave the world for good (1.7). What they carried stays
+        where they stood; anyone standing by them is just standing."""
+        e = self.entities.get(entity_id)
+        if e is None:
+            return
+        for o in self.held_by(e.id):
+            o.loc_kind, o.loc_id = "room", e.room
+            self._touch(o)
+        self._emit(LEFT_ROOM, e.room, {"entity": e.id, "entity_name": e.name, "to": None, "to_name": None,
+                                       "via": None, "gone": True})
+        del self.entities[e.id]
+        self._pending.entities.pop(e.id, None)
+        self._pending.gone.add(e.id)
+        for other in self.entities.values():
+            if other.near == e.id:
+                other.near = None
+                self._touch(other)
 
     def any_online(self) -> bool:
         return any(e.online for e in self.entities.values())

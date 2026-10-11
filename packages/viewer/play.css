@@ -1,0 +1,77 @@
+/* The /play page; colours, the header and the join card come from viewer.css. */
+body.play-page { overflow: hidden; }
+.login-card input[type="text"] {
+  font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.login-card input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.play {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 12px; padding: 12px;
+  background: linear-gradient(var(--tint), var(--tint)), var(--bg);
+}
+.play[hidden] { display: none; }
+.play-left { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; padding-bottom: 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.card h3 {
+  margin: 10px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+}
+.card h3:first-child { margin-top: 0; }
+.muted { color: var(--muted); }
+.here-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.here-head h2 { font-size: 18px; }
+.here p { margin: 6px 0; }
+.you-line { font-size: 13px; color: var(--muted); }
+
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn, .composer select, .goto select, .items select {
+  font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.btn { cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.08); }
+.btn.small { font-size: 12px; padding: 2px 8px; }
+
+.goto { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.goto select { flex: 1; min-width: 0; }
+
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.items > li { display: flex; flex-direction: column; gap: 4px; }
+.items .title { font-weight: 600; }
+.items .title .muted { font-weight: 400; }
+.items .desc { font-size: 13px; color: var(--muted); }
+.items .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.items .inside { margin: 2px 0 0 12px; font-size: 13px; }
+.items .empty { color: var(--muted); font-size: 13px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; color: var(--muted); margin-left: 4px; }
+
+.chat-card { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.play-log { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 12px 14px; }
+.play-log li { padding: 3px 0; }
+.play-log .when { color: var(--muted); font-size: 11px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.play-log .speaker { font-weight: 600; }
+.play-log .system { color: var(--muted); }
+.play-log .whisper { color: var(--whisper); font-style: italic; }
+.play-log .shout { color: var(--shout); font-weight: 600; }
+.play-log .private { color: var(--accent); }
+.play-log .failed { color: var(--shout); }
+.play-log .mine .speaker { color: var(--accent); }
+.composer { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.composer input {
+  flex: 1; min-width: 0; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink);
+}
+.composer input:focus, .goto select:focus, .composer select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (max-width: 760px) {
+  body.play-page { overflow: auto; }
+  .play { display: flex; flex-direction: column; overflow: visible; flex: none; min-height: auto; }
+  .play-left { overflow: visible; min-height: auto; flex: none; }
+  .composer select { max-width: 34%; }
+  .chat-card { min-height: 60vh; }
+  header .clock { display: none; }
+}

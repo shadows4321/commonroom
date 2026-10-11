@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import hmac
 import logging
+import re
 import tempfile
 import time
 from importlib import metadata
@@ -33,6 +35,7 @@ DEFAULT_VIEWER_DIR = Path(__file__).resolve().parents[3] / "viewer"
 REGISTER_TIMEOUT = 10.0
 MAX_HOUSE_BYTES = 100 * 1024 * 1024  # a house .glb uploaded on /admin
 AUTH_FAILURE_DELAY = 1.0  # seconds; slows down password guessing
+GUEST_NAME = re.compile(r"[^\W_][\w '.\-]{0,23}")  # 1-24 characters, starting with a letter or digit
 
 try:
     SERVER_VERSION = metadata.version("commonroom-server")
@@ -92,6 +95,8 @@ class Hub:
         self.agent_conns: dict[str, Connection] = {}
         self.viewers: set[Connection] = set()
         self.suspended: set[str] = set()  # AIs the host turned away on /admin, until resumed or restarted
+        self.guests: dict[str, AgentSpec] = {}  # guests in the world now, by id ("guest-<name>")
+        self.guest_leaving: dict[str, asyncio.Task] = {}  # guests who closed /play, about to go home
         self.started = time.time()
 
     def authenticate(self, token: str) -> AgentSpec | None:
@@ -109,6 +114,51 @@ class Hub:
         if expected is None:
             return True
         return isinstance(password, str) and hmac.compare_digest(expected.encode(), password.encode())
+
+    def guest(self, password, name) -> tuple[AgentSpec | None, tuple[str, str] | None]:
+        """A person joining from /play with the guest password and a name: (spec, None), or
+        (None, (reason, message)). A returning guest gets their old place back."""
+        expected = self.agents.guest_password
+        if expected is None:
+            return None, ("unauthorized", "This world doesn't take guests.")
+        if not (isinstance(password, str) and hmac.compare_digest(expected.encode(), password.encode())):
+            return None, ("unauthorized", "That's not the guest password.")
+        name = " ".join(str(name or "").split())
+        if not GUEST_NAME.fullmatch(name):
+            return None, ("bad_name", "Pick a name of 1 to 24 letters, digits or spaces.")
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or hashlib.sha1(name.encode()).hexdigest()[:8]
+        gid = f"guest-{slug}"
+        lower = name.lower()
+        for spec in self.agents.agents.values():
+            if lower in (spec.id.lower(), spec.name.lower()):
+                return None, ("name_taken", f"{name} is the name of an AI here. Pick another one.")
+        for e in self.world.entities.values():
+            if e.id != gid and e.name.lower() == lower:
+                return None, ("name_taken", f"Someone called {e.name} is already here. Pick another name.")
+        if gid in self.agent_conns:
+            return None, ("name_taken", f"Someone called {name} is already here. Pick another name.")
+        if gid in self.suspended:
+            return None, ("unauthorized", "The host has turned that name away.")
+        spec = self.guests.get(gid) or AgentSpec(id=gid, name=name, token="", kind="guest")
+        self.guests[gid] = spec
+        return spec, None
+
+    def guest_left(self, gid: str, grace: float) -> None:
+        """A guest closed /play: after `grace` seconds without coming back, they go home."""
+        async def leave():
+            await asyncio.sleep(grace)
+            self.guest_leaving.pop(gid, None)
+            if gid in self.agent_conns:
+                return
+            self.guests.pop(gid, None)
+            self.world.remove_entity(gid)
+            self.dispatch(self.world.commit())
+            log.info("guest %s went home", gid)
+
+        old = self.guest_leaving.pop(gid, None)
+        if old:
+            old.cancel()
+        self.guest_leaving[gid] = asyncio.create_task(leave())
 
     def admin_allowed(self, password: str | None) -> bool:
         expected = self.agents.admin_password
@@ -131,6 +181,8 @@ class Hub:
                 "objects": [self.world.object_view(o, nested=False) for o in batch.objects.values()],
                 "clock": self.world.clock.view(),
             }
+            if batch.gone:
+                update["gone"] = sorted(batch.gone)  # 1.7: entities that left the world (guests)
             for conn in self.viewers:
                 conn.send(update)
 
@@ -181,9 +233,13 @@ _AVATAR_STATUS = {"too_large": 413, "unsupported_type": 415}
 
 def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | None = None,
                viewer_dir: str | Path | None = DEFAULT_VIEWER_DIR, clock_interval: float = 1.0,
-               avatars_dir: str | Path | None = None) -> FastAPI:
+               avatars_dir: str | Path | None = None, guest_grace: float = 60.0) -> FastAPI:
     store = Store(db_path, world_config.settings.recent_events) if db_path else None
-    hub = Hub(World(world_config, store), agents)
+    world = World(world_config, store)
+    for e in [e for e in world.entities.values() if e.kind == "guest"]:
+        world.remove_entity(e.id)  # guests from before a restart have gone home
+    world.commit()
+    hub = Hub(world, agents)
     avatar_limits = AvatarLimits.from_settings(world_config.settings.avatars)
     avatar_store = AvatarStore(avatars_dir or tempfile.mkdtemp(prefix="commonroom-avatars-"))
 
@@ -193,6 +249,8 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         yield
         if task:
             task.cancel()
+        for leaving in hub.guest_leaving.values():
+            leaving.cancel()
         for eid in list(hub.agent_conns):
             hub.world.disconnect(eid)
         hub.world.commit()
@@ -240,6 +298,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         elif (protocol := negotiate(hello.get("protocol"))) is None:
             error = ("protocol_mismatch", f"No common protocol version. Server supports "
                                           f"{', '.join(SUPPORTED_VERSIONS)}; you offered {hello.get('protocol')!r}.")
+        elif "guest_password" in hello:  # 1.7: a person joining from /play with a name
+            spec, error = hub.guest(hello.get("guest_password"), hello.get("name"))
+            if error and error[0] == "unauthorized":
+                await asyncio.sleep(AUTH_FAILURE_DELAY)
         elif (spec := hub.authenticate(hello.get("token", ""))) is None:
             error = ("unauthorized", "Unknown token.")
         elif spec.id in hub.suspended:
@@ -257,7 +319,11 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             old.send({"type": ERROR, "reason": "replaced", "message": "Another connection logged in as you."})
             asyncio.create_task(old.close(4409))
         hub.agent_conns[spec.id] = conn
-        entity = hub.world.connect(spec, hello.get("name"), hello.get("description"))
+        leaving = hub.guest_leaving.pop(spec.id, None)
+        if leaving:
+            leaving.cancel()
+        name = spec.name if spec.kind == "guest" else hello.get("name")  # a guest's name is already tidied up
+        entity = hub.world.connect(spec, name, hello.get("description"))
         batch = hub.world.commit()
         conn.send({"type": WELCOME, "id": hello.get("id"), "protocol": protocol, "server_version": SERVER_VERSION,
                    "world": hub.world.config.name,
@@ -279,6 +345,8 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                 hub.world.disconnect(spec.id)
                 hub.dispatch(hub.world.commit())
                 log.info("%s disconnected", spec.id)
+                if spec.kind == "guest":
+                    hub.guest_left(spec.id, guest_grace)
             await conn.close()
 
     @app.websocket(f"{API_PREFIX}/ws/viewer")
@@ -391,7 +459,7 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             raise HTTPException(401, "wrong admin password")
 
     def admin_agent(agent_id: str) -> AgentSpec:
-        spec = hub.agents.agents.get(agent_id)
+        spec = hub.agents.agents.get(agent_id) or hub.guests.get(agent_id)
         if spec is None:
             raise HTTPException(404, f"no AI {agent_id!r} in agents.yaml")
         return spec
@@ -406,6 +474,7 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
                 "name": e.name if e else spec.name,
                 "description": e.description if e else spec.description,
                 "in_agents_file": spec is not None,
+                "kind": e.kind if e else (spec.kind if spec else "ai"),
                 "connected": eid in hub.agent_conns,
                 "suspended": eid in hub.suspended,
                 "room": e.room if e else None,
@@ -499,6 +568,8 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         With ?shared=true, `owner` is the id of a shared house that belongs to no AI (?name= names a new one)."""
         await require_admin(request)
         spec = None if shared else admin_agent(owner)
+        if spec is not None and spec.kind == "guest":
+            return _problem(422, "bad_request", f"{spec.name} is a guest: guests don't have houses (try a shared one).")
         hid = owner if shared else spec.id
         world_dir = hub.world.config.world_dir
         if world_dir is None or not hub.world.config.plots:
@@ -608,6 +679,10 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
         @app.get("/admin")
         async def admin_page():
             return FileResponse(viewer_dir / "admin.html")
+
+        @app.get("/play")
+        async def play_page():
+            return FileResponse(viewer_dir / "play.html")
 
         app.mount("/viewer", StaticFiles(directory=viewer_dir), name="viewer")
 

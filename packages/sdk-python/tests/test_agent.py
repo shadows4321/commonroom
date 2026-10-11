@@ -225,3 +225,16 @@ def test_http_base():
     assert http_base("ws://h:8765") == "http://h:8765"
     assert http_base("wss://world.example.com/v1/ws") == "https://world.example.com"
     assert http_base("wss://example.com/world/v1/ws") == "https://example.com/world"
+
+
+def test_guests_are_described_as_people():
+    from commonroom import Perception, format_event
+
+    view = Perception()
+    view.load({"you": {"id": "mia", "name": "Mia", "holding": []}, "objects": [], "recent_events": [],
+               "room": {"id": "hall", "name": "Hall", "description": "", "exits": []}, "clock": {"label": "08:00"},
+               "last_speech_seq": 0,
+               "occupants": [{"id": "guest-bob", "name": "Bob", "kind": "guest", "online": True, "holding": []}]})
+    assert "Bob [guest-bob] (a human guest, not an AI)" in view.describe()
+    assert format_event({"type": "left_room", "entity": "guest-bob", "entity_name": "Bob", "to": None,
+                         "to_name": None, "gone": True}) == "Bob went home."

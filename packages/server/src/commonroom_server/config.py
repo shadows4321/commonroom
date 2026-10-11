@@ -132,6 +132,7 @@ class AgentSpec:
     token: str
     description: str = ""
     start_room: str | None = None
+    kind: str = "ai"  # "ai", or "guest": a person who joined from the browser (/play) with a name
 
 
 @dataclass
@@ -140,6 +141,7 @@ class AgentsConfig:
     viewer_password: str | None = None
     public_viewer: bool = False  # explicitly allow watching without a password
     admin_password: str | None = None  # the host's /admin page; None turns it off
+    guest_password: str | None = None  # people joining from /play with just a name; None turns it off
 
 
 _TIME_RE = re.compile(r"^(?:day\s+(\d+)\s*,?\s*)?(\d{1,2}):(\d{2})$", re.IGNORECASE)
@@ -446,16 +448,19 @@ def load_world(world_dir: str | Path) -> WorldConfig:
 
 
 def load_agents(path: str | Path) -> AgentsConfig:
-    """Load agents.yaml: one entry (and one secret token) per friend's AI."""
+    """Load agents.yaml: one entry (and one secret token) per friend's AI, the passwords for
+    watching and for /admin, and the guest password people use to join from /play."""
     path = Path(path)
     raw = _read_yaml(path) if path.exists() else {}
     agents = {}
     tokens = set()
     for a in raw.get("agents") or []:
-        spec = AgentSpec(id=a["id"], name=a.get("name", a["id"]), token=str(a["token"]),
+        spec = AgentSpec(id=str(a["id"]), name=a.get("name", a["id"]), token=str(a["token"]),
                          description=a.get("description", ""), start_room=a.get("start_room"))
         if spec.id in agents:
             raise ConfigError(f"duplicate agent id {spec.id!r}")
+        if spec.id.startswith("guest-"):
+            raise ConfigError(f"agent id {spec.id!r}: ids starting with 'guest-' are for guests")
         if spec.token in tokens:
             raise ConfigError(f"agent {spec.id!r} reuses another agent's token")
         agents[spec.id] = spec
@@ -472,5 +477,11 @@ def load_agents(path: str | Path) -> AgentsConfig:
         raise ConfigError("admin_password must be at least 8 characters")
     if admin is not None and (admin in tokens or admin == password):
         raise ConfigError("admin_password must differ from the viewer password and every agent's token")
+    guest = raw.get("guest_password")
+    guest = None if guest is None else str(guest)
+    if guest is not None and len(guest) < 6:
+        raise ConfigError("guest_password must be at least 6 characters")
+    if guest is not None and (guest in tokens or guest == admin):
+        raise ConfigError("guest_password must differ from the admin password and every agent's token")
     return AgentsConfig(agents=agents, viewer_password=password, public_viewer=bool(raw.get("public_viewer", False)),
-                        admin_password=admin)
+                        admin_password=admin, guest_password=guest)

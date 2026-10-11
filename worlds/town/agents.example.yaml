@@ -11,6 +11,10 @@ viewer_password: change-me-viewer
 # avatars). Leave it out to turn the page off. Must differ from the above.
 # admin_password: change-me-admin
 
+# Optional: lets people join in from the browser at /play with any name and
+# this password, without an AI. Leave it out to turn guests off.
+# guest_password: change-me-guest
+
 # AIs with a house (see `houses:` in world.yaml) start at home.
 agents:
   - id: mia

@@ -162,6 +162,8 @@ class Perception:
             lines.append("Here with you:")
             for o in self.occupants.values():
                 bits = []
+                if o.get("kind") == "guest":
+                    bits.append("a human guest, not an AI")
                 if o.get("pose"):
                     bits.append(_pose_text(o["pose"]))
                 elif o.get("near"):
@@ -169,7 +171,7 @@ class Perception:
                 if o.get("holding"):
                     bits.append("holding " + ", ".join(h["name"] for h in o["holding"]))
                 if not o.get("online", True):
-                    bits.append("dozing (their AI is offline)")
+                    bits.append("away for a moment" if o.get("kind") == "guest" else "dozing (their AI is offline)")
                 if o["id"] in self.typing:
                     bits.append("about to say something")
                 desc = f" {o['description']}" if o.get("description") else ""
@@ -246,6 +248,8 @@ def format_event(ev: dict, me: str | None = None) -> str | None:
         whence = f" from the {ev['from_name']}" if ev.get("from_name") else ""
         return f"{who(ev['entity'], ev.get('entity_name'))} entered{whence}."
     if kind == LEFT_ROOM:
+        if ev.get("gone"):
+            return f"{who(ev['entity'], ev.get('entity_name'))} went home."
         return f"{who(ev['entity'], ev.get('entity_name'))} left for the {ev.get('to_name')}."
     if kind == POSITION_CHANGED:
         near = ev.get("near")

@@ -779,7 +779,7 @@ function syncCharacter(entity, { teleport = false } = {}) {
     teleport = true;
   }
   ch.setAvatar(entity);
-  ch.nameTag.textContent = entity.name;
+  ch.nameTag.textContent = entity.kind === "guest" ? `${entity.name} · guest` : entity.name;
   ch.nameTag.classList.toggle("offline", !entity.online);
   const place = standingPlace(entity);
   if (!place) { ch.group.visible = false; ch.room = entity.room; return; }
@@ -1141,7 +1141,7 @@ function renderPeople() {
     button.setAttribute("aria-pressed", String(following === e.id));
     const dot = el("span", "dot");
     dot.style.background = `#${colorFor(e.id).getHexString()}`;
-    const name = el("span", e.online ? "" : "offline", e.name);
+    const name = el("span", e.online ? "" : "offline", e.kind === "guest" ? `${e.name} (guest)` : e.name);
     const where = el("span", "where", state.rooms.get(e.room)?.name || "");
     button.append(dot, name, where);
     button.onclick = () => (following === e.id ? $("overview").onclick() : follow(e.id));
@@ -1201,6 +1201,13 @@ function loadState(data) {
 function applyUpdate(data) {
   for (const o of data.objects) { state.objects.set(o.id, o); applyObject(o); }
   for (const e of data.entities) state.entities.set(e.id, e);
+  for (const id of data.gone || []) { // 1.7: guests who went home
+    state.entities.delete(id);
+    const ch = characters.get(id);
+    if (ch) { ch.group.remove(ch.label); scene.remove(ch.group); characters.delete(id); } // label first: that removes its DOM element
+    if (following === id) following = null;
+  }
+  if (data.gone?.length) renderPeople();
   if (data.objects.length) applyWhen();
   if (data.clock) {
     const phaseChanged = !state.clock || state.clock.phase !== data.clock.phase;

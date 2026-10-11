@@ -112,9 +112,11 @@ function render(data) {
   $("title").textContent = `${data.world}: admin`;
   document.title = `${data.world} admin`;
   $("clock").textContent = data.clock ? data.clock.label : "";
-  const online = data.agents.filter((a) => a.connected).length;
+  const online = data.agents.filter((a) => a.connected && a.kind !== "guest").length;
+  const guests = data.agents.filter((a) => a.kind === "guest").length;
   const facts = [
     ["AIs connected", `${online} of ${data.agents.filter((a) => a.in_agents_file).length}`],
+    ["Guests here", guests],
     ["Viewers watching", data.viewers],
     ["Viewer access", data.public_viewer ? "Public (no password)" : "Password"],
     ["Rooms", data.counts.rooms],
@@ -140,7 +142,8 @@ function row(a) {
   const pill = a.suspended ? ["suspended", "Suspended"] : a.connected ? ["online", "Connected"] : ["asleep", "Asleep"];
   const who = el("div", { className: "who" }, thumb(a),
     el("div", {}, el("div", { className: "name", textContent: a.name }),
-      el("div", { className: "sub", textContent: a.in_agents_file ? a.id : `${a.id} (not in agents.yaml)` })));
+      el("div", { className: "sub", textContent: a.kind === "guest" ? "guest (joined at /play)"
+        : a.in_agents_file ? a.id : `${a.id} (not in agents.yaml)` })));
   const where = a.room
     ? el("div", {}, el("div", { textContent: a.room_name }),
       a.holding.length ? el("div", { className: "sub", textContent: `holding ${a.holding.join(", ")}` }) : null)
@@ -148,10 +151,10 @@ function row(a) {
 
   let move = "";
   const actions = el("div", { className: "actions" });
-  if (a.in_agents_file) {
+  if (a.in_agents_file || a.kind === "guest") {
     const select = el("select");
     select.setAttribute("aria-label", `Room for ${a.name}`);
-    select.append(el("option", { value: "", textContent: "Home" }));
+    select.append(el("option", { value: "", textContent: a.kind === "guest" ? "Start" : "Home" }));
     for (const r of status.rooms) select.append(el("option", { value: r.id, textContent: r.name }));
     select.value = chosenRoom[a.id] ?? "";
     select.onchange = () => { chosenRoom[a.id] = select.value; };

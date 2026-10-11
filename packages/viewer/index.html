@@ -11,7 +11,19 @@
     <h1 id="world-name">Commonroom</h1>
     <div id="clock" class="clock" title="World time">--:--</div>
     <div id="status" class="status offline" title="Connection">connecting…</div>
+    <button id="logout" class="link-button" type="button" hidden>Log out</button>
   </header>
+  <div id="login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h2>Watch this world</h2>
+      <p>Enter the viewer password the host gave you.</p>
+      <label class="sr-only" for="login-password">Viewer password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required placeholder="Viewer password">
+      <label class="remember"><input id="login-remember" type="checkbox"> Remember on this device</label>
+      <p id="login-error" class="login-error" role="alert" hidden></p>
+      <button type="submit">Watch</button>
+    </form>
+  </div>
   <main>
     <section id="map" class="map" aria-label="Rooms"></section>
     <aside class="log-panel" aria-label="Event log">

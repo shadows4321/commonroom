@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from commonroom_protocol import (
-    ENTERED_ROOM, LEFT_ROOM, MAX_TEXT_LENGTH, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE,
+    ENTERED_ROOM, LEFT_ROOM, MAX_TEXT_LENGTH, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE, PROFILE_CHANGED,
     SPEECH, TIME_TICK, TYPING_EVENT, Reason,
 )
 
@@ -42,6 +42,7 @@ class Entity:
     room: str
     near: str | None = None
     online: bool = False
+    avatar: dict | None = None  # the entity view's "avatar" field (see avatars.AvatarInfo.view)
 
 
 @dataclass
@@ -303,6 +304,7 @@ class World:
             "near": self._near_view(e),
             "online": e.online,
             "holding": [{"id": o.id, "name": self.obj_name(o)} for o in self.held_by(e.id)],
+            "avatar": e.avatar,
         }
 
     def _near_view(self, e: Entity) -> dict | None:
@@ -358,23 +360,46 @@ class World:
 
     # ------------------------------------------------------------ lifecycle
 
-    def connect(self, spec: AgentSpec, name: str | None = None, description: str | None = None) -> Entity:
+    def ensure_entity(self, spec: AgentSpec, name: str | None = None, description: str | None = None) -> Entity:
+        """The entity for an agent, created (asleep, in its start room) the first time it's needed."""
         e = self.entities.get(spec.id)
         if e is None:
             room = spec.start_room if spec.start_room in self.rooms else self.settings.start_room
             e = Entity(id=spec.id, name=name or spec.name, description=description or spec.description, room=room)
             self.entities[e.id] = e
+            self._touch(e)
             self._emit(ENTERED_ROOM, e.room, {"entity": e.id, "entity_name": e.name, "from": None,
                                               "entity_view": self.entity_view(e)})
-        else:
-            if name:
-                e.name = name
-            if description is not None:
-                e.description = description
+        return e
+
+    def connect(self, spec: AgentSpec, name: str | None = None, description: str | None = None) -> Entity:
+        e = self.ensure_entity(spec, name, description)
+        changed = (bool(name) and name != e.name) or (description is not None and description != e.description)
+        if name:
+            e.name = name
+        if description is not None:
+            e.description = description
+        if changed:
+            self._profile_changed(e)
         e.online = True
         self._touch(e)
         self._emit(PRESENCE, e.room, {"entity": e.id, "entity_name": e.name, "online": True})
         return e
+
+    def set_avatar(self, entity_id: str, avatar: dict | None) -> dict | None:
+        """Replace an entity's avatar (None removes it). Returns the previous one."""
+        e = self.entities[entity_id]
+        previous, e.avatar = e.avatar, avatar
+        self._profile_changed(e)
+        return previous
+
+    def avatar_in_use(self, sha256: str) -> bool:
+        return any(e.avatar and e.avatar.get("sha256") == sha256 for e in self.entities.values())
+
+    def _profile_changed(self, e: Entity) -> None:
+        self._touch(e)
+        self._emit(PROFILE_CHANGED, e.room, {"entity": e.id, "entity_name": e.name,
+                                             "entity_view": self.entity_view(e)})
 
     def disconnect(self, entity_id: str) -> None:
         e = self.entities.get(entity_id)

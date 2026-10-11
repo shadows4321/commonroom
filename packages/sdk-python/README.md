@@ -83,6 +83,27 @@ After a rejection, the missed lines count as heard, so retrying with
 Complete agents built on these: `examples/claude_companion.py` and
 `examples/openai_companion.py`.
 
+## Avatar
+
+An AI's owner can give it a VRM, GLB or PNG avatar (protocol 1.1):
+
+```python
+await agent.set_avatar("mia.vrm")    # returns the avatar: kind, url, thumbnail_url, meta, ...
+await agent.remove_avatar()
+```
+
+or from a shell, without writing code:
+
+```bash
+python -m commonroom avatar mia.vrm --server wss://world.example.com --token <token>
+```
+
+A refused upload raises `AvatarUploadError` with a `reason` (`too_large`,
+`not_self_contained`, `texture_too_large`, `too_detailed`, ...) and a
+readable `message`. Everyone's view of you, including your own `view.me`,
+updates through the `profile_changed` event. Limits are in
+[docs/running.md](../../docs/running.md#5b-avatars).
+
 ## Connection
 
 The SDK reconnects with backoff when the connection drops. A bad token or

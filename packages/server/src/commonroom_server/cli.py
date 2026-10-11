@@ -25,19 +25,23 @@ def _run(args: argparse.Namespace) -> None:
     agents = load_agents(agents_path)
     if not agents.agents:
         print(f"warning: no agents in {agents_path}; add one with `commonroom-server add-agent`", file=sys.stderr)
+    if agents.viewer_password is None and not agents.public_viewer:
+        sys.exit(f"error: no viewer_password in {agents_path}.\n"
+                 f"Set one with `commonroom-server set-viewer-password --world {args.world}`, or add "
+                 f"`public_viewer: true` to {agents_path.name} to let anyone with the address watch.")
     db = None if args.db == ":memory:" else args.db
-    app = create_app(world, agents, db_path=db, viewer_dir=args.viewer)
+    avatars_dir = args.avatars_dir or (Path(db).resolve().parent / "avatars" if db else None)
+    app = create_app(world, agents, db_path=db, viewer_dir=args.viewer, avatars_dir=avatars_dir)
     print(f"{world.name}: {len(world.rooms)} rooms, {len(world.objects)} objects, {len(agents.agents)} agents")
-    print(f"viewer: http://{args.host}:{args.port}/")
+    access = "password required" if agents.viewer_password else "PUBLIC, no password"
+    print(f"viewer: http://{args.host}:{args.port}/  ({access})")
     print(f"agents: ws://{args.host}:{args.port}  (protocol {PROTOCOL_VERSION}, endpoint {API_PREFIX}/ws)")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
 def _add_agent(args: argparse.Namespace) -> None:
     path = Path(args.agents or Path(args.world) / "agents.yaml")
-    raw = yaml.safe_load(path.read_text()) if path.exists() else None
-    raw = raw or {}
-    raw.setdefault("agents", [])
+    raw = _read_agents_file(path)
     agent_id = args.id or re.sub(r"[^a-z0-9_]+", "_", args.name.lower()).strip("_")
     if any(a["id"] == agent_id for a in raw["agents"]):
         sys.exit(f"agent {agent_id!r} already exists in {path}")
@@ -53,6 +57,28 @@ def _add_agent(args: argparse.Namespace) -> None:
     print("Send this token to the friend who runs this AI. Restart the server to pick it up.")
 
 
+def _read_agents_file(path: Path) -> dict:
+    raw = yaml.safe_load(path.read_text()) if path.exists() else None
+    raw = raw or {}
+    raw.setdefault("agents", [])
+    return raw
+
+
+def _set_viewer_password(args: argparse.Namespace) -> None:
+    path = Path(args.agents or Path(args.world) / "agents.yaml")
+    password = args.password or secrets.token_urlsafe(12)
+    if len(password) < 8:
+        sys.exit("the viewer password must be at least 8 characters")
+    raw = _read_agents_file(path)
+    raw.pop("viewer_token", None)
+    raw.pop("public_viewer", None)
+    raw = {"viewer_password": password, **{k: v for k, v in raw.items() if k != "viewer_password"}}
+    path.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True))
+    print(f"viewer password saved to {path}")
+    print(f"password: {password}")
+    print("Share it with the people who should be able to watch. Restart the server to pick it up.")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="commonroom-server")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -64,6 +90,8 @@ def main(argv: list[str] | None = None) -> None:
     run.add_argument("--host", default="127.0.0.1")
     run.add_argument("--port", type=int, default=8765)
     run.add_argument("--viewer", default=None, help="viewer directory (default: packages/viewer in the repo)")
+    run.add_argument("--avatars-dir", default=None,
+                     help="where uploaded avatars are stored (default: 'avatars' next to the --db file)")
     run.set_defaults(func=_run)
 
     add = sub.add_parser("add-agent", help="add an AI and generate its secret token")
@@ -74,6 +102,12 @@ def main(argv: list[str] | None = None) -> None:
     add.add_argument("--description", default="")
     add.add_argument("--start-room")
     add.set_defaults(func=_add_agent)
+
+    pw = sub.add_parser("set-viewer-password", help="set (or generate) the password for watching in the browser")
+    pw.add_argument("password", nargs="?", help="at least 8 characters (default: generate one)")
+    pw.add_argument("--world", required=True)
+    pw.add_argument("--agents", help="agents.yaml (default: <world>/agents.yaml)")
+    pw.set_defaults(func=_set_viewer_password)
 
     args = parser.parse_args(argv)
     if getattr(args, "viewer", "unset") is None:

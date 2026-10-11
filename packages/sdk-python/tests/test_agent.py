@@ -2,7 +2,9 @@ import asyncio
 
 import pytest
 
-from commonroom import Agent, FatalError, call_tool, is_failure, openai_tool_schemas, tool_schemas
+from commonroom import (
+    Agent, AvatarUploadError, FatalError, call_tool, is_failure, openai_tool_schemas, tool_schemas,
+)
 from commonroom_protocol import PROTOCOL_VERSION
 
 
@@ -135,3 +137,41 @@ async def test_call_tool_is_polite_and_reports_bad_calls(pair):
     assert "bad_request" in await call_tool(mia, "say", {})
     assert "bad_request" in await call_tool(mia, "give", {"object": "box", "bogus": 1})
     assert "bad_request" in await call_tool(mia, "look", ["not", "a", "dict"])
+
+
+async def test_set_avatar_updates_everyone(pair, tmp_path):
+    from avatar_files import model, png
+
+    mia, otto = pair
+    (tmp_path / "mia.vrm").write_bytes(model(title="Mia v1"))
+    avatar = await mia.set_avatar(str(tmp_path / "mia.vrm"))
+    assert avatar["kind"] == "vrm" and avatar["meta"]["title"] == "Mia v1"
+    await eventually(lambda: (otto.view.occupants["mia"].get("avatar") or {}).get("kind") == "vrm")
+    await eventually(lambda: (mia.view.me.get("avatar") or {}).get("kind") == "vrm")
+
+    (tmp_path / "bad.png").write_bytes(png(5000, 10))
+    with pytest.raises(AvatarUploadError) as exc:
+        await mia.set_avatar(str(tmp_path / "bad.png"))
+    assert exc.value.reason == "texture_too_large" and exc.value.status == 422
+
+    await mia.remove_avatar()
+    await eventually(lambda: otto.view.occupants["mia"].get("avatar") is None)
+
+
+async def test_avatar_command_line(server, tmp_path, capsys):
+    from avatar_files import png
+    from commonroom.__main__ import main
+
+    (tmp_path / "me.png").write_bytes(png())
+    # The CLI blocks, and the test server runs on this event loop, so run the CLI in a thread.
+    await asyncio.to_thread(main, ["avatar", str(tmp_path / "me.png"), "--server", server, "--token", "tok-otto"])
+    assert "uploaded png avatar" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="upload failed"):
+        await asyncio.to_thread(main, ["avatar", str(tmp_path / "me.png"), "--server", server, "--token", "wrong"])
+
+
+def test_http_base():
+    from commonroom.avatar import http_base
+    assert http_base("ws://h:8765") == "http://h:8765"
+    assert http_base("wss://world.example.com/v1/ws") == "https://world.example.com"
+    assert http_base("wss://example.com/world/v1/ws") == "https://example.com/world"

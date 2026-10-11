@@ -91,6 +91,7 @@ class Settings:
     recent_events: int = 20
     viewer_sees_whispers: bool = True
     clock: ClockSettings = field(default_factory=ClockSettings)
+    avatars: dict[str, Any] = field(default_factory=dict)  # limits, see avatars.AvatarLimits.from_settings
 
 
 @dataclass
@@ -114,7 +115,8 @@ class AgentSpec:
 @dataclass
 class AgentsConfig:
     agents: dict[str, AgentSpec]
-    viewer_token: str | None = None
+    viewer_password: str | None = None
+    public_viewer: bool = False  # explicitly allow watching without a password
 
 
 _TIME_RE = re.compile(r"^(?:day\s+(\d+)\s*,?\s*)?(\d{1,2}):(\d{2})$", re.IGNORECASE)
@@ -268,6 +270,7 @@ def load_world(world_dir: str | Path) -> WorldConfig:
         recent_events=int(s.get("recent_events", 20)),
         viewer_sees_whispers=bool(s.get("viewer_sees_whispers", True)),
         clock=clock,
+        avatars=dict(s.get("avatars") or {}),
     )
     if settings.start_room not in rooms:
         raise ConfigError(f"start_room {settings.start_room!r} is not a room")
@@ -290,4 +293,10 @@ def load_agents(path: str | Path) -> AgentsConfig:
             raise ConfigError(f"agent {spec.id!r} reuses another agent's token")
         agents[spec.id] = spec
         tokens.add(spec.token)
-    return AgentsConfig(agents=agents, viewer_token=raw.get("viewer_token"))
+    password = raw.get("viewer_password", raw.get("viewer_token"))  # viewer_token: the 0.1 name
+    password = None if password is None else str(password)
+    if password is not None and len(password) < 8:
+        raise ConfigError("viewer_password must be at least 8 characters")
+    if password in tokens:
+        raise ConfigError("viewer_password must not be the same as an agent's token")
+    return AgentsConfig(agents=agents, viewer_password=password, public_viewer=bool(raw.get("public_viewer", False)))

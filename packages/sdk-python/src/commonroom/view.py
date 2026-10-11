@@ -6,7 +6,7 @@ from collections import deque
 from typing import Any
 
 from commonroom_protocol import (
-    ENTERED_ROOM, LEFT_ROOM, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE, SNAPSHOT, SPEECH,
+    ENTERED_ROOM, LEFT_ROOM, OBJECT_CHANGED, POSITION_CHANGED, PRESENCE, PROFILE_CHANGED, SNAPSHOT, SPEECH,
     TIME_TICK, TYPING_EVENT,
 )
 
@@ -63,6 +63,12 @@ class Perception:
             target = self.me if ev["entity"] == self.me_id else self.occupants.get(ev["entity"])
             if target is not None:
                 target["near"] = ev["near"]
+        elif kind == PROFILE_CHANGED:
+            view = ev["entity_view"]
+            if ev["entity"] == self.me_id:
+                self.me.update({k: v for k, v in view.items() if k != "holding"})
+            elif ev["entity"] in self.occupants:
+                self.occupants[ev["entity"]] = view
         elif kind == PRESENCE and ev["entity"] in self.occupants:
             self.occupants[ev["entity"]]["online"] = ev["online"]
         elif kind == SPEECH:

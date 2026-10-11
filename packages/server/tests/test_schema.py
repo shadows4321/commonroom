@@ -11,11 +11,14 @@ from jsonschema import Draft202012Validator
 from commonroom_protocol import API_PREFIX, PROTOCOL_MAJOR, PROTOCOL_VERSION
 from commonroom_server.app import create_app
 
+from avatar_files import model
+
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "protocol" / "schemas" / f"v{PROTOCOL_MAJOR}" / "protocol.schema.json"
 SCHEMA = json.loads(SCHEMA_PATH.read_text())
 Draft202012Validator.check_schema(SCHEMA)
 
 BY_TYPE = {"welcome": "Welcome", "ack": "Ack", "action_failed": "ActionFailed", "error": "Error",
+           "auth_required": "AuthRequired",
            "world_state": "WorldState", "update": "Update"}
 
 
@@ -50,8 +53,8 @@ SCRIPT = [
 ]
 
 
-def test_live_messages_match_schema(config, agents):
-    app = create_app(config, agents, viewer_dir=None, clock_interval=0)
+def test_live_messages_match_schema(config, agents, tmp_path):
+    app = create_app(config, agents, viewer_dir=None, clock_interval=0, avatars_dir=tmp_path)
     seen = {}
     with TestClient(app) as client, client.websocket_connect(f"{API_PREFIX}/ws/viewer") as viewer, \
             contextlib.ExitStack() as stack:
@@ -72,6 +75,12 @@ def test_live_messages_match_schema(config, agents):
                 seen.setdefault(msg["type"], msg)
                 if msg.get("id") == intent["id"]:
                     break
+        res = client.put(f"{API_PREFIX}/avatar", content=model(), headers={"Authorization": "Bearer tok-mia"})
+        assert res.status_code == 200
+        while (msg := socks["mia"].receive_json())["type"] != "profile_changed":
+            validate(msg)
+        validate(msg)
+        seen.setdefault("profile_changed", msg)
         hub = app.state.hub
         hub.world.advance_clock(20)
         hub.dispatch(hub.world.commit())
@@ -87,7 +96,7 @@ def test_live_messages_match_schema(config, agents):
             if any(e["type"] == "time_tick" for e in msg["events"]):
                 break
     expected = {"welcome", "ack", "action_failed", "speech", "presence", "object_changed",
-                "position_changed", "left_room", "time_tick"}
+                "position_changed", "left_room", "time_tick", "profile_changed"}
     assert expected <= set(seen), expected - set(seen)
 
 

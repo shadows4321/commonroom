@@ -8,7 +8,12 @@ from pathlib import Path
 
 from .world import Batch, Entity, Event, Obj
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Each step upgrades a database from version N to N + 1.
+MIGRATIONS = {
+    1: ["ALTER TABLE entities ADD COLUMN avatar TEXT"],  # avatars (protocol 1.1)
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -20,7 +25,8 @@ CREATE TABLE IF NOT EXISTS entities (
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     room TEXT NOT NULL,
-    near TEXT
+    near TEXT,
+    avatar TEXT
 );
 CREATE TABLE IF NOT EXISTS objects (
     id TEXT PRIMARY KEY,
@@ -51,13 +57,23 @@ class Store:
         self.recent_per_room = recent_per_room
         self.db = sqlite3.connect(self.path)
         self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.executescript(SCHEMA)
-        version = self._meta("schema_version")
+        has_tables = self.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'meta'").fetchone() is not None
+        version = self._meta("schema_version") if has_tables else None
         if version is None:
+            self.db.executescript(SCHEMA)
             self._set_meta("schema_version", SCHEMA_VERSION)
             self.db.commit()
-        elif int(version) != SCHEMA_VERSION:
-            raise RuntimeError(f"database {self.path} has schema v{version}, expected v{SCHEMA_VERSION}")
+            return
+        version = int(version)
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(f"database {self.path} has schema v{version}, but this server only knows up to "
+                               f"v{SCHEMA_VERSION}; upgrade the server")
+        with self.db:
+            while version < SCHEMA_VERSION:
+                for statement in MIGRATIONS[version]:
+                    self.db.execute(statement)
+                version += 1
+                self._set_meta("schema_version", version)
 
     def _meta(self, key: str):
         row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
@@ -72,8 +88,9 @@ class Store:
         clock = self._meta("clock_minutes")
         if clock is None:
             return None
-        entities = [Entity(id=r[0], name=r[1], description=r[2], room=r[3], near=r[4])
-                    for r in self.db.execute("SELECT id, name, description, room, near FROM entities")]
+        entities = [Entity(id=r[0], name=r[1], description=r[2], room=r[3], near=r[4],
+                           avatar=json.loads(r[5]) if r[5] else None)
+                    for r in self.db.execute("SELECT id, name, description, room, near, avatar FROM entities")]
         objects = [Obj(id=r[0], type=r[1], loc_kind=r[2], loc_id=r[3], state=json.loads(r[4]),
                        name=r[5], description=r[6])
                    for r in self.db.execute("SELECT id, type, loc_kind, loc_id, state, name, description FROM objects")]
@@ -97,10 +114,10 @@ class Store:
         with self.db:
             for e in batch.entities.values():
                 self.db.execute(
-                    "INSERT INTO entities (id, name, description, room, near) VALUES (?, ?, ?, ?, ?) "
+                    "INSERT INTO entities (id, name, description, room, near, avatar) VALUES (?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT (id) DO UPDATE SET name = excluded.name, description = excluded.description, "
-                    "room = excluded.room, near = excluded.near",
-                    (e.id, e.name, e.description, e.room, e.near))
+                    "room = excluded.room, near = excluded.near, avatar = excluded.avatar",
+                    (e.id, e.name, e.description, e.room, e.near, json.dumps(e.avatar) if e.avatar else None))
             for o in batch.objects.values():
                 self.db.execute(
                     "INSERT INTO objects (id, type, loc_kind, loc_id, state, name, description) "

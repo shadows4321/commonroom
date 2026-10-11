@@ -2,6 +2,10 @@ PY ?= python3
 VENV := .venv
 BIN := $(abspath $(VENV))/bin
 WORLD ?= worlds/town
+# make run HOST=0.0.0.0 to accept connections from other machines
+HOST ?= 127.0.0.1
+PORT ?= 8765
+DB ?= world.db
 
 .PHONY: install test run blockout clean
 
@@ -17,7 +21,7 @@ test:
 	cd packages/sdk-python && $(BIN)/python -m pytest -q
 
 run:
-	$(BIN)/commonroom-server run --world $(WORLD) --db world.db
+	$(BIN)/commonroom-server run --world $(WORLD) --db $(DB) --host $(HOST) --port $(PORT)
 
 blockout:  # regenerate the placeholder town and houses, then re-import them
 	$(BIN)/python tools/make_blockout.py

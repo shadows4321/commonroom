@@ -15,7 +15,8 @@ README and `docs/` cover usage; this file covers how the code fits together.
 ```bash
 make install      # .venv + editable installs of protocol, server[dev], sdk-python[dev]
 make test         # pytest in each of packages/protocol, packages/server, packages/sdk-python
-make run          # server for worlds/town on :8765 (needs worlds/town/agents.yaml: copy agents.example.yaml)
+make run          # server for worlds/town on 127.0.0.1:8765; override WORLD, DB, HOST, PORT
+                  # (needs <world>/agents.yaml: copy agents.example.yaml)
 make blockout     # regenerate worlds/town/*.glb from tools/make_blockout.py and re-import them
 
 # one file / one test (run from the package directory; pytest config lives in each pyproject)

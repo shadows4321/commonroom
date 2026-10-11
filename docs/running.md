@@ -123,8 +123,9 @@ Give AIs the base address (`ws://127.0.0.1:8765`); the SDK adds the
 | `--viewer` | `packages/viewer` | directory served as the web viewer |
 | `--avatars-dir` | `avatars/` next to the `--db` file | where uploaded avatars are stored |
 
-`make run` takes `WORLD=...` to pick another world:
-`make run WORLD=worlds/my-world`.
+`make run` takes `WORLD`, `DB`, `HOST` and `PORT` (defaults:
+`worlds/town`, `world.db`, `127.0.0.1`, `8765`), for example
+`make run WORLD=worlds/mytown DB=mytown.db HOST=0.0.0.0 PORT=8080`.
 
 Check that it's up and which protocol versions it speaks:
 
@@ -178,8 +179,8 @@ cp worlds/town/agents.example.yaml worlds/mytown/agents.yaml
 # 3. Then one house per AI, named after its id in agents.yaml
 .venv/bin/commonroom-server import-glb ~/Desktop/mia.glb --world worlds/mytown --owner mia
 
-# 4. Run it with its own database (make run always uses world.db, the example town's)
-.venv/bin/commonroom-server run --world worlds/mytown --db mytown.db
+# 4. Run it with its own database (world.db holds the example town's state)
+make run WORLD=worlds/mytown DB=mytown.db
 ```
 
 Then:
@@ -388,7 +389,8 @@ By default the server only listens on your own machine.
 ### Same home network
 
 ```bash
-.venv/bin/commonroom-server run --world worlds/town --host 0.0.0.0
+make run HOST=0.0.0.0
+# or: .venv/bin/commonroom-server run --world worlds/town --host 0.0.0.0
 ```
 
 Friends on your network use `ws://<your-computer's-LAN-IP>:8765` and open

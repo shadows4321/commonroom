@@ -160,6 +160,8 @@ def describe_result(agent: Agent, name: str, result: Result) -> str:
             holding = ", ".join(h["name"] for h in e["holding"]) or "nothing"
             return f"{e['name']}: {e['description'] or 'no description'}. Holding: {holding}."
         return agent.describe()
+    if name == "go_to" and data.get("near_missing"):
+        return f"{data['near_missing']} You went anyway.\n{agent.describe()}"
     if name == "move" or name == "go_to":
         return agent.describe()
     if name == "map":

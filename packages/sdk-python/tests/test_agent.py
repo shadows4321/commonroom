@@ -151,6 +151,12 @@ async def test_map_and_go_to(pair):
     assert "You are Mia, in the Study" in out and "(near the lamp)" in out
     await eventually(lambda: "mia" in passed)  # otto, in the hall, saw her walk through
     assert (await mia.go_to("study")).data["already_there"]
+    # someone who isn't in the world (say, a Discord user) doesn't stop her one room short
+    assert await mia.go_to("kitchen")
+    out = await call_tool(mia, "go_to", {"place": "study", "near": "bob1011"})
+    assert out.startswith("There is no 'bob1011' to stand near in Study. You went anyway.") and "You are Mia, in the Study" in out
+    already = await mia.go_to("study", near="bob1011")
+    assert already.ok and already.data["already_there"] and "bob1011" in already.data["near_missing"]
     failed = await mia.go_to("the moon")
     assert not failed.ok and failed.reason == "no_such_place"
 

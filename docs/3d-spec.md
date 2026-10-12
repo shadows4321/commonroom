@@ -173,6 +173,7 @@ Types in the bundled town (`worlds/town/objects.yaml`) and their states:
 | `kettle` | `hot`, `filled` | |
 | `mug` | `contents` (`empty`/`tea`) | |
 | `plant` | `watered` | |
+| `floor_grid` (floor lights) | `lit`: on while anyone is in the room | |
 | `fountain`, `bookshelf`, `fixture` | none | |
 | `sofa` | none | 3 |
 | `bed` | none | 2 |

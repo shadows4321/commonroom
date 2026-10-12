@@ -38,6 +38,14 @@ class ScheduleEntry:
 
 
 @dataclass
+class RoomTrigger:
+    """`on_enter` / `on_empty`: a state change when someone walks in, or the last person leaves."""
+    sets: dict[str, Any]
+    requires: dict[str, Any] = field(default_factory=dict)
+    message: str | None = None
+
+
+@dataclass
 class ContainerSpec:
     capacity: int = 10
     requires: dict[str, Any] = field(default_factory=dict)  # state needed to reach inside
@@ -54,6 +62,8 @@ class ObjectType:
     verbs: dict[str, Verb] = field(default_factory=dict)
     container: ContainerSpec | None = None
     schedule: list[ScheduleEntry] = field(default_factory=list)
+    on_enter: list[RoomTrigger] = field(default_factory=list)  # someone came into the object's room
+    on_empty: list[RoomTrigger] = field(default_factory=list)  # the last person left it
     seats: int = 0  # how many people can sit or lie on it at once (1 if a verb has a pose and it isn't set)
 
 
@@ -213,6 +223,7 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
         _, minute = parse_time(s["at"])
         schedule.append(ScheduleEntry(at=minute, sets=dict(s.get("sets") or {}),
                                       requires=dict(s.get("requires") or {}), message=s.get("message")))
+    on_enter, on_empty = (_parse_triggers(type_id, key, raw.get(key)) for key in ("on_enter", "on_empty"))
     posed = any(v.pose for v in verbs.values())
     seats = int(raw.get("seats", 1 if posed else 0))
     if posed and seats < 1:
@@ -227,8 +238,19 @@ def _parse_type(type_id: str, raw: dict) -> ObjectType:
         verbs=verbs,
         container=container,
         schedule=schedule,
+        on_enter=on_enter,
+        on_empty=on_empty,
         seats=seats,
     )
+
+
+def _parse_triggers(type_id: str, key: str, value: Any) -> list[RoomTrigger]:
+    """One `{requires, sets, message}` mapping or a list of them."""
+    entries = [value] if isinstance(value, dict) else value or []
+    if not isinstance(entries, list) or not all(isinstance(t, dict) for t in entries):
+        raise ConfigError(f"type {type_id!r}: {key} must be a mapping or a list of mappings")
+    return [RoomTrigger(sets=dict(t.get("sets") or {}), requires=dict(t.get("requires") or {}),
+                        message=t.get("message")) for t in entries]
 
 
 def _parse_pose(type_id: str, verb: str, value: Any) -> str | None:

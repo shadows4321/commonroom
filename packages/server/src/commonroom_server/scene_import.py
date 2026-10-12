@@ -236,6 +236,10 @@ def type_info(raw_types: dict) -> dict[str, TypeInfo]:
             keys |= set(d.get("when") or {})
         for entry in raw.get("schedule") or []:
             keys |= set(entry.get("sets") or {})
+        for key in ("on_enter", "on_empty"):
+            triggers = raw.get(key) or []
+            for entry in [triggers] if isinstance(triggers, dict) else triggers:
+                keys |= set((entry or {}).get("sets") or {}) | set((entry or {}).get("requires") or {})
         posed = any((v or {}).get("pose") for v in verbs.values())
         info[str(tid)] = TypeInfo(state=keys, seats=int(raw.get("seats", 1 if posed else 0)))
     return info

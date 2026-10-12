@@ -11,6 +11,10 @@ format_version: 1   # world file format; see packages/protocol/README.md#version
 #             standing gets them off again. The type's `seats` says how many fit.
 # Containers declare `container: {capacity, requires}`; `requires` is the state
 # needed to reach inside. `schedule` changes state at a world time of day.
+# `on_enter` changes it when someone comes into the object's room, `on_empty`
+# when the last person leaves: {requires, sets, message} like a schedule entry
+# (or a list of them). The message may name {object} and {actor}, the person
+# who came in or went out last. Sleeping AIs still count as being there.
 types:
   kettle:
     description: A dented steel kettle.

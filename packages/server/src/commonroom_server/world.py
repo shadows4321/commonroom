@@ -446,6 +446,7 @@ class World:
             self._touch(e)
             self._emit(ENTERED_ROOM, e.room, {"entity": e.id, "entity_name": e.name, "from": None,
                                               "entity_view": self.entity_view(e)})
+            self._room_changed(e, None)
         return e
 
     def connect(self, spec: AgentSpec, name: str | None = None, description: str | None = None) -> Entity:
@@ -504,6 +505,7 @@ class World:
                                         "entity_view": self.entity_view(e)})
         for held in self.held_by(e.id):
             self._touch(held)
+        self._room_changed(e, old)
 
     def clear_area(self, area_id: str, to_room: str) -> None:
         """Empty a house that's about to be taken down: everyone inside walks out to `to_room`,
@@ -540,6 +542,8 @@ class World:
             if other.near == e.id:
                 other.near = None
                 self._touch(other)
+        if not self.occupant_ids(e.room):
+            self._room_triggers(e.room, "on_empty", e)
 
     def any_online(self) -> bool:
         return any(e.online for e in self.entities.values())
@@ -658,6 +662,7 @@ class World:
                                             "entity_view": self.entity_view(e)})
             for held in self.held_by(e.id):
                 self._touch(held)
+            self._room_changed(e, old)
         elif near is not None:
             e.near, e.pose = near_id, None
             self._touch(e)
@@ -743,6 +748,29 @@ class World:
         self._emit(TYPING_EVENT, e.room, {"entity": e.id, "entity_name": e.name, "active": bool(active)},
                    audience=audience, log=False)
         return {}
+
+    def _room_changed(self, e: Entity, left: str | None) -> None:
+        """`e` just walked from `left` into its current room: fire the objects' on_empty and on_enter."""
+        if left is not None and not self.occupant_ids(left):
+            self._room_triggers(left, "on_empty", e)
+        self._room_triggers(e.room, "on_enter", e)
+
+    def _room_triggers(self, room: str, which: str, e: Entity) -> None:
+        """Apply the `which` triggers (on_enter / on_empty) of everything in `room` but what people carry.
+        Like a schedule, it's the object's doing: `actor` is None, `{actor}` in the message names `e`."""
+        for obj in self.objects.values():
+            if obj.loc_kind == "entity" or self.room_of_object(obj) != room:
+                continue
+            for entry in getattr(self.obj_type(obj), which):
+                if not _matches(obj.state, entry.requires):
+                    continue
+                changed = {k: v for k, v in entry.sets.items() if obj.state.get(k) != v}
+                if not changed and not entry.message:
+                    continue
+                obj.state.update(entry.sets)
+                msg = _format(entry.message, {"object": f"the {self.obj_name(obj)}", "actor": e.name}) \
+                    if entry.message else ""
+                self._object_changed(obj, "state", None, msg, changed=changed)
 
     def _object_changed(self, obj: Obj, change: str, actor: Entity | None, message: str, **extra: Any) -> Event:
         self._touch(obj)

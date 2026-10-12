@@ -26,6 +26,16 @@ types:
       - {at: "19:00", sets: {lit: true}, requires: {lit: false}, message: "{object} flickers on as dusk falls."}
       - {at: "06:30", sets: {lit: false}, requires: {lit: true}, message: "{object} goes out with the dawn."}
 
+  floor_grid:
+    name: floor lights
+    description: Lines of light set into the floor.
+    state: {lit: false}
+    state_descriptions:
+      - {when: {lit: true}, text: They glow a cold blue.}
+    # Lights up when someone walks in, goes dark when the last person leaves.
+    on_enter: {requires: {lit: false}, sets: {lit: true}, message: "{object} trace blue lines across the floor as {actor} walks in."}
+    on_empty: {sets: {lit: false}}
+
   fountain:
     description: A stone fountain, burbling quietly.
     verbs:

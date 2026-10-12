@@ -108,7 +108,8 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   the object. `Entity.pose` holds `{kind, object, seat}`; any `move` clears it.
   The 3D viewer places people on `seat:<obj>` markers and bends the VRM bones.
 - Objects are data: types (verbs with `requires`/`needs`/`sets`/`pose`,
-  containers, schedules) come from `objects.yaml`. `fixture` is a built-in type,
+  containers, schedules, `on_enter`/`on_empty` room triggers fired by
+  `World._room_changed`) come from `objects.yaml`. `fixture` is a built-in type,
   because `import-glb` assigns it to new objects.
 
 ## SDK (`packages/sdk-python/src/commonroom`)

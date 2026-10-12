@@ -20,8 +20,8 @@ def fails(world, who, type_, reason, **args):
 def test_move_by_direction_and_room_name(world):
     result, batch = act(world, "mia", "move", to="north")
     assert result["room"] == "kitchen"
-    assert [e.type for e in batch.events] == ["left_room", "entered_room"]
-    left, entered = batch.events
+    assert [e.type for e in batch.events] == ["left_room", "entered_room", "object_changed"]  # the floor grid
+    left, entered, _ = batch.events
     assert left.audience == {"mia", "otto"}  # everyone who was in the hall, including the mover
     assert entered.audience == {"mia"}
     act(world, "mia", "move", to="Hall")
@@ -146,7 +146,7 @@ def test_objects_never_duplicate(world):
     act(world, "otto", "put_down", object="key", into="box")
     locations = [(o.loc_kind, o.loc_id) for o in world.objects.values() if o.id == "key"]
     assert locations == [("container", "box")]
-    assert len(world.objects) == 10
+    assert len(world.objects) == 11
 
 
 def test_sit_and_lie_on_furniture(world):
@@ -249,6 +249,35 @@ def test_clock_ticks_schedules_and_phase(world):
     tick = next(e for e in batch.events if e.type == "time_tick")
     assert tick.payload["clock"]["phase"] == "morning" and tick.payload["phase_changed"]
     assert "Sunny." in world.room_view("kitchen")["description"]
+
+
+def test_on_enter_and_on_empty(world):
+    _, batch = act(world, "mia", "move", to="north")
+    assert [e.type for e in batch.events] == ["left_room", "entered_room", "object_changed"]
+    lit = batch.events[-1]
+    assert world.objects["grid"].state["lit"] is True
+    assert lit.payload["message"] == "The floor grid lights up under Mia's feet."
+    assert lit.payload["actor"] is None and lit.payload["changed"] == {"lit": True}
+    assert lit.audience == {"mia"}
+
+    _, batch = act(world, "otto", "move", to="north")  # requires lit: false, so nothing again
+    assert [e.type for e in batch.events] == ["left_room", "entered_room"]
+
+    act(world, "otto", "move", to="south")  # Mia is still there
+    assert world.objects["grid"].state["lit"] is True
+    _, batch = act(world, "mia", "move", to="south")
+    dark = batch.events[-1]
+    assert dark.type == "object_changed" and dark.room == "kitchen" and dark.audience == set()
+    assert world.objects["grid"].state["lit"] is False
+
+
+def test_on_enter_by_teleport_and_on_empty_when_a_guest_leaves(world):
+    world.teleport("kai", "kitchen")
+    world.commit()
+    assert world.objects["grid"].state["lit"] is True
+    world.remove_entity("kai")
+    assert world.commit().events[-1].type == "object_changed"
+    assert world.objects["grid"].state["lit"] is False
 
 
 def test_clock_pauses_when_empty(world):

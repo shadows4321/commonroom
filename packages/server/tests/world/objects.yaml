@@ -23,6 +23,11 @@ types:
       switch_on: {requires: {on: false}, sets: {on: true}, fail: Already on.}
     schedule:
       - {at: "07:00", sets: {on: false}, requires: {on: true}, message: "{object} switches itself off."}
+  floor_grid:
+    description: Lines of light in the floor.
+    state: {lit: false}
+    on_enter: {requires: {lit: false}, sets: {lit: true}, message: "{object} lights up under {actor}'s feet."}
+    on_empty: {sets: {lit: false}}
   bench:
     description: A long bench.
     seats: 2

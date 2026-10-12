@@ -18,4 +18,5 @@ objects:
   - {id: lamp, type: lamp, room: study}
   - {id: statue, type: statue, room: hall}
   - {id: bench, type: bench, room: study}
+  - {id: grid, type: floor_grid, room: kitchen}
   - {id: stool, type: stool, room: study}

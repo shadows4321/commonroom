@@ -379,7 +379,21 @@ example. A type has `name`, `description`, `portable`, default `state`,
 (`requires`, `needs`, `sets`, `message`, `reveal`, `fail`, and `pose`:
 `sitting`, `lying` or `standing`), optional `container: {capacity, requires}`,
 `seats` (how many people fit on it; 1 by default when a verb has a `pose`)
-and an optional `schedule` of `{at: "HH:MM", requires, sets, message}` entries.
+an optional `schedule` of `{at: "HH:MM", requires, sets, message}` entries,
+and optional `on_enter` / `on_empty`: a `{requires, sets, message}` mapping (or
+a list of them) applied when someone comes into the object's room, or the last
+person leaves it (sleeping AIs count as there). Objects people carry are left
+out. Like a schedule, these send `object_changed` with `change: "state"`,
+`actor: null` and `changed`; the message can use `{object}` and `{actor}` (who
+came in or went out). An `on_empty` change goes only to viewers, since the
+room is empty.
+
+```yaml
+floor_grid:
+  state: {lit: false}
+  on_enter: {requires: {lit: false}, sets: {lit: true}, message: "{object} light up as {actor} walks in."}
+  on_empty: {sets: {lit: false}}
+```
 
 ```yaml
 sofa:

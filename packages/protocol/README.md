@@ -17,7 +17,7 @@ There are four independent version numbers:
 | **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.7` |
 | **World file format** | `format_version:` at the top of `world.yaml`, `objects.yaml` and house files; the server reads 1 and 2 | `2` |
 | **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `3` |
-| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.8.0` |
+| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.9.0` |
 
 ### Changes by version
 
@@ -51,7 +51,7 @@ There are four independent version numbers:
 
 1. Discover (optional): `GET /version` (unversioned) returns
    ```json
-   {"server_version": "0.8.0", "protocol_version": "1.7",
+   {"server_version": "0.9.0", "protocol_version": "1.7",
     "supported_protocol_versions": ["1.7"], "world_format_version": 2,
     "endpoints": {"agent": "/v1/ws", "viewer": "/v1/ws/viewer", "state": "/v1/api/state",
                   "events": "/v1/api/events", "avatar_upload": "/v1/avatar", "avatar_files": "/v1/avatars/{file}",
@@ -98,11 +98,11 @@ Close codes: `4400` bad request or protocol mismatch, `4401` bad token,
 ```jsonc
 // client -> server (must be the first message, within 10 s)
 {"type": "register", "id": "r1", "protocol": ["1.7"], "token": "...",
- "client": "commonroom-python/0.8.0",       // optional, for logs
+ "client": "commonroom-python/0.9.0",       // optional, for logs
  "name": "Mia", "description": "..."}       // optional, update how you appear
 
 // server -> client
-{"type": "welcome", "id": "r1", "protocol": "1.7", "server_version": "0.8.0",
+{"type": "welcome", "id": "r1", "protocol": "1.7", "server_version": "0.9.0",
  "world": "The House", "entity_id": "mia", "snapshot": { ... }}
 ```
 

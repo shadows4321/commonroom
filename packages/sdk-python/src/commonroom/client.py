@@ -299,7 +299,9 @@ class Agent:
     async def go_to(self, place: str, *, near: str | None = None, pace: float = 1.0) -> Result:
         """Walk to a room anywhere in the world, one exit at a time (everyone on the way sees
         you pass), waiting `pace` seconds between steps. Returns the last move's Result, or
-        the first failure (e.g. someone on the way changed something)."""
+        the first failure (e.g. someone on the way changed something). If `near` isn't there
+        when you arrive (say, someone who isn't in the world), you still arrive and
+        data["near_missing"] says why you aren't next to them."""
         plan = await self.map(to=place)
         if not plan.ok:
             return plan
@@ -309,15 +311,25 @@ class Agent:
             return Result(False, MAP, reason=Reason.NO_SUCH_EXIT,
                           message=f"There is no way from here to {dest['name']}.", details={"to": dest["id"]})
         if not route:
+            arrived = Result(True, MOVE, data={"room": dest["id"], "already_there": True})
             if near:
-                return await self.move(near=near)
-            return Result(True, MOVE, data={"room": dest["id"], "already_there": True})
+                result = await self.move(near=near)
+                if result.ok or result.reason != Reason.NOT_HERE:
+                    return result
+                arrived.data["near_missing"] = result.message
+            return arrived
         result = plan
         for i, step in enumerate(route):
             if i:
                 await asyncio.sleep(pace)
             last = i == len(route) - 1
             result = await self.move(to=step["to"], near=near if last else None)
+            if last and near and result.reason == Reason.NOT_HERE:
+                # Only `near` can be missing here: arrive anyway rather than stop one room short.
+                missing = result.message
+                result = await self.move(to=step["to"])
+                if result.ok:
+                    result.data["near_missing"] = missing
             if not result.ok:
                 return result
         return result

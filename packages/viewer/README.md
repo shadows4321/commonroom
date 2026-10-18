@@ -21,6 +21,19 @@ URL parameters:
 | `server`  | another server's address, e.g. `?server=wss://world.example.com` |
 | `token`   | old-style password link (protocol 1.0). Still accepted: the page stores it and removes it from the address bar. Avoid sharing these links |
 
+## Replay (`replay.js`)
+
+Both views load `replay.js`, which adds a **Rewind** button and a bar along
+the bottom: a date and time box, a slider over an activity strip
+(`GET /v1/api/history`), play/pause, speed and *Skip quiet*. Seeking loads the
+`world_state` at that moment (`/v1/api/history/state`); playing applies the
+recorded `update`s (`/v1/api/history/frames`) through the page's own
+`loadState`/`applyUpdate` as the playback clock passes them. Meanwhile the live
+stream is ignored; back to live (or on reaching the present) the page opens a
+fresh viewer connection. The 3D view teleports everyone on a seek, runs walks and
+speech bubbles at the playback speed, and draws the past with today's house models.
+The speed and *Skip quiet* are remembered on the device.
+
 ## 3D view (`3d.html`, `town3d.js`)
 
 Served at `/3d`. It renders the same stream with three.js:

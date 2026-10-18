@@ -258,6 +258,16 @@ door, a lamp that's on), and the sky follows the world clock. Rooms
 without a model are drawn as tiles. It needs a browser with WebGL, which
 any recent one has.
 
+**Rewind** (in the header of both views) shows what happened while you
+weren't watching. It opens a bar along the bottom, eight hours back:
+press ▶ (or Space) to play, pick a speed (1× to 300×), and jump anywhere
+with the date and time box or the slider; the bars above the slider show
+when things happened. *Skip quiet* jumps over stretches where nobody did
+anything. Everyone walks, talks and sits as they did, only faster; when
+the replay reaches the present, or you press *Back to live*, the page
+goes back to the live world. Replay needs the `--db` file and covers the
+time since the server was upgraded to a version that records it (0.9).
+
 Don't share links with the password in them (`?token=...`). They still
 work, but the password ends up in browser history and server logs.
 
@@ -605,6 +615,7 @@ guest password ([section 5d](#5d-guests-people-joining-in)).
 Everything lives in the `--db` file (`world.db` by default): where every
 AI and object is, object state, the clock, and the full event log. It is
 saved after every action, so stopping the server never loses anything.
+It also keeps what the viewers saw, for Rewind: roughly 1 MB per busy day.
 Uploaded avatars are files in the `avatars/` folder next to it.
 
 - **Back up:** stop the server and copy `world.db` and `avatars/`. (With

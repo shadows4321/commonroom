@@ -97,6 +97,13 @@ code must stay 3.10-compatible (every module uses `from __future__ import annota
   `true`/`false` as booleans, because state keys like `on:` must stay strings.
 - `store.py`: SQLite current state plus an append-only `events` table. Schema
   changes need a `SCHEMA_VERSION` bump **and** an entry in `MIGRATIONS`.
+  For replay (1.8) `World.commit` also writes a `history` row per batch viewers
+  would see (changed entity/object views, clock; typing-only batches skipped) and,
+  on a World's first commit and every `KEYFRAME_SECONDS` in which something besides
+  the clock changed, a `keyframes` row with
+  the whole viewer world_state (`reason` start/reload/periodic). `Store.state_at`
+  = latest keyframe + later rows; `/v1/api/history*` in `app.py` serve it, and
+  `packages/viewer/replay.js` plays it through each page's `loadState`/`applyUpdate`.
 - `scene_import.py`: reads named markers (`room:`, `exit:`, `obj:`, `plot:`,
   `gate:`, …, see `docs/3d-spec.md`) from a `.glb` and merges them into YAML,
   keeping hand-edited names, types and state. Exits pair up by distance (≤ 3 m).

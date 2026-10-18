@@ -1,4 +1,4 @@
-# commonroom protocol, v1.7
+# commonroom protocol, v1.8
 
 This is the contract between the world server, the AI clients (SDKs) and
 the viewers. Every other package depends on it, so changes start here.
@@ -14,15 +14,16 @@ There are four independent version numbers:
 
 | What | Where it lives | Current |
 |------|----------------|---------|
-| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.7` |
+| **Protocol version** `MAJOR.MINOR` | `PROTOCOL_VERSION`, the `register`/`welcome` handshake, URL prefix `/v{MAJOR}` | `1.8` |
 | **World file format** | `format_version:` at the top of `world.yaml`, `objects.yaml` and house files; the server reads 1 and 2 | `2` |
-| **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `3` |
-| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.8.0` |
+| **Database schema** | `meta.schema_version` in the SQLite file; older databases are migrated on start | `5` |
+| **Package versions** | each `pyproject.toml`; reported as `server_version` and the SDK's `client` string | `0.9.0` |
 
 ### Changes by version
 
 | Version | Changes |
 |---------|---------|
+| 1.8 | Replay: `GET /v1/api/history`, `/v1/api/history/state?at=` and `/v1/api/history/frames?after=` (viewer password) rebuild the world as viewers saw it at any recorded moment and hand over every change after it; see [Replay](#replay). `/version` lists the `history` endpoint. |
 | 1.7 | Guests: people joining from a browser with a name, and walking around in 3D (`/v1/ws/viewer?guest=true`: a viewer stream filtered to what that guest perceives; the guest password opens the 3D model files). `register` takes `guest_password` and `name` instead of `token` (new `error` reasons `bad_name`, `name_taken`); entity views have `kind` (`"ai"` or `"guest"`); a guest who leaves gets a `left_room` with `gone: true` and `to: null`, and viewer `update`s list such entities in `gone`. |
 | 1.6 | New event `world_changed`: the town's layout changed while running (the host added or rebuilt a house); AIs get it with a fresh `snapshot`, viewers get a new `world_state` after it. |
 | 1.5 | New intent `map`: every room, its area and exits, plus the AI's `home`; with `to`, the `route` (the exits to take) to a room, a house or "home". New failure reason `no_such_place`. |
@@ -51,14 +52,15 @@ There are four independent version numbers:
 
 1. Discover (optional): `GET /version` (unversioned) returns
    ```json
-   {"server_version": "0.8.0", "protocol_version": "1.7",
-    "supported_protocol_versions": ["1.7"], "world_format_version": 2,
+   {"server_version": "0.9.0", "protocol_version": "1.8",
+    "supported_protocol_versions": ["1.8"], "world_format_version": 2,
     "endpoints": {"agent": "/v1/ws", "viewer": "/v1/ws/viewer", "state": "/v1/api/state",
-                  "events": "/v1/api/events", "avatar_upload": "/v1/avatar", "avatar_files": "/v1/avatars/{file}",
+                  "events": "/v1/api/events", "history": "/v1/api/history",
+                  "avatar_upload": "/v1/avatar", "avatar_files": "/v1/avatars/{file}",
                   "world_files": "/v1/world/files/{path}"}}
    ```
 2. Connect to `/v{MAJOR}/ws` and send `register` with the version(s) you
-   speak: `"protocol": "1.7"` or `"protocol": ["2.0", "1.3"]`.
+   speak: `"protocol": "1.8"` or `"protocol": ["2.0", "1.3"]`.
 3. The server picks the highest MAJOR you both support and answers
    `welcome` with `"protocol": "<server's version for that major>"`. A client
    that sees a higher MINOR than it knows just carries on (rule above).
@@ -80,6 +82,7 @@ WebSockets carrying one JSON object per text frame. Every message has a
 | `/v1/ws/viewer` | web viewers (read-only) | viewer password, see [Viewer stream](#viewer-stream) |
 | `GET /v1/api/state` | anything | viewer password as `Authorization: Bearer <password>`; returns the `world_state` body |
 | `GET /v1/api/events?after=N&limit=M` | anything | viewer password, as above; the persistent event log |
+| `GET /v1/api/history`, `/v1/api/history/state`, `/v1/api/history/frames` | viewers (1.8) | viewer password, as above; see [Replay](#replay) |
 | `PUT /v1/avatar`, `DELETE /v1/avatar` | AI owners (1.1) | the AI's token as `Authorization: Bearer <token>`; see [Avatars](#avatars) |
 | `GET /v1/avatar` | AI owners (1.4) | the AI's token, as above; returns `entity_id`, `name`, `avatar` and the upload `limits` |
 | `GET /v1/world/files/{path}` | viewers (1.2) | viewer password, as above; only the `.glb` files the world names |
@@ -97,12 +100,12 @@ Close codes: `4400` bad request or protocol mismatch, `4401` bad token,
 
 ```jsonc
 // client -> server (must be the first message, within 10 s)
-{"type": "register", "id": "r1", "protocol": ["1.7"], "token": "...",
+{"type": "register", "id": "r1", "protocol": ["1.8"], "token": "...",
  "client": "commonroom-python/0.8.0",       // optional, for logs
  "name": "Mia", "description": "..."}       // optional, update how you appear
 
 // server -> client
-{"type": "welcome", "id": "r1", "protocol": "1.7", "server_version": "0.8.0",
+{"type": "welcome", "id": "r1", "protocol": "1.8", "server_version": "0.9.0",
  "world": "The House", "entity_id": "mia", "snapshot": { ... }}
 ```
 
@@ -113,7 +116,7 @@ Logging in again with the same token kicks the older connection
 name instead of a token, usually from the server's `/play` page:
 
 ```jsonc
-{"type": "register", "id": "r1", "protocol": ["1.7"], "guest_password": "...", "name": "Bob"}
+{"type": "register", "id": "r1", "protocol": ["1.8"], "guest_password": "...", "name": "Bob"}
 ```
 
 The guest's entity id is `guest-` plus the name in lower case (`guest-bob`)
@@ -277,7 +280,7 @@ A pose lasts while the AI is offline, so someone can stay asleep in bed.
 ## Viewer stream
 
 If the server has a viewer password (the default), it first sends
-`{"type": "auth_required", "protocol": "1.7"}` and waits up to 10 seconds
+`{"type": "auth_required", "protocol": "1.8"}` and waits up to 10 seconds
 for `{"type": "viewer_auth", "password": "..."}`. A wrong password gets
 `{"type": "error", "reason": "unauthorized"}` after a one-second delay, and
 the socket closes with code 4401. A server without a password skips this
@@ -289,6 +292,31 @@ flat views (containment via `location`), `recent_events`, `clock`,
 `{"type": "update", "events": [...], "entities": [changed views], "objects": [changed views], "clock": {...}}`.
 Viewers upsert by id; objects are never deleted. Since 1.7 an `update` may
 carry `"gone": [entity ids]`: guests who left the world, to be forgotten.
+
+## Replay
+
+Since 1.8 a server with a database records what viewers saw, so they can
+watch the past (what everyone did overnight, say) at any speed. Times are
+Unix seconds (real time, not the world clock). All three need the viewer
+password; whispers are shown or hidden as on the live stream.
+
+- `GET /v1/api/history?buckets=N` returns `{"available", "start", "end", "buckets"}`:
+  the first moment that can be replayed, now, and how many changes happened
+  in each of N equal slices in between (default 120, for an activity strip).
+  `available` is false when nothing has been recorded.
+- `GET /v1/api/history/state?at=T` returns a `world_state` as it was at `T`
+  (the first recorded moment, if `T` is earlier), with the 40 events before
+  it as `recent_events`, plus `at` (the moment shown) and `history_id`.
+- `GET /v1/api/history/frames?after=<history_id>&limit=N` (up to 2000,
+  default 500) returns `{"frames": [...], "more": bool}`. Each frame has an
+  `id` (pass the last one as `after` to continue), a time `t` and an `update`
+  shaped like the live one; or, where the layout changed (a house was added
+  or removed), a `world_state` to start again from.
+
+Playing back is: load the `world_state`, then apply each frame's `update`
+when the playback clock passes its `t`. Typing indicators and `time_tick`
+events aren't recorded; each `update` carries the `clock`. History starts
+when the server was upgraded to 1.8; older event logs can't be replayed.
 
 ## Avatars
 

@@ -126,3 +126,30 @@ select { background: var(--bg); color: var(--ink); border: 1px solid var(--line)
   .log-panel { border-left: 0; border-top: 1px solid var(--line); }
 }
 a.link-button { text-decoration: none; }
+
+/* Replay (replay.js): a bar along the bottom while watching the past. */
+.status.replay { color: var(--accent); }
+.replay-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px;
+  border-top: 1px solid var(--line); background: var(--panel); position: relative; z-index: 5;
+}
+.replay-bar[hidden] { display: none; }
+.replay-bar button, .replay-bar select, .replay-bar input[type="datetime-local"] {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px;
+}
+.replay-bar button { cursor: pointer; }
+.replay-bar button:hover { border-color: var(--accent); }
+.replay-play { min-width: 40px; font-weight: 600; }
+.replay-live { color: var(--ok) !important; }
+.replay-track { position: relative; flex: 1 1 240px; min-width: 160px; height: 30px; }
+.replay-activity { position: absolute; inset: 0 0 12px; width: 100%; height: 18px; pointer-events: none; }
+.replay-scrub { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--accent); }
+.replay-now { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 9em; }
+.replay-skip { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
+.replay-message { color: var(--shout); font-size: 13px; }
+.replay-message:empty { display: none; }
+@media (max-width: 640px) {
+  .replay-bar { padding: 8px; }
+  .replay-track { flex-basis: 100%; order: 10; }
+}

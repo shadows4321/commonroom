@@ -3,7 +3,7 @@
   "$id": "commonroom/protocol/v1",
   "title": "commonroom wire protocol, major version 1",
   "description": "Messages exchanged over /v1/ws and /v1/ws/viewer. Objects allow extra properties on purpose: minor versions add fields, and peers must ignore what they don't know.",
-  "$comment": "protocol_version 1.7",
+  "$comment": "protocol_version 1.8",
   "$defs": {
     "id": {
       "type": "string",
@@ -1205,6 +1205,14 @@
           "items": {
             "$ref": "#/$defs/Area"
           }
+        },
+        "at": {
+          "type": "number",
+          "description": "1.8, replay only: the moment shown (Unix seconds)."
+        },
+        "history_id": {
+          "type": "integer",
+          "description": "1.8, replay only: the last recorded change included; ask GET /v1/api/history/frames?after= for the ones after it."
         }
       }
     },
@@ -1619,6 +1627,82 @@
             }
           },
           "description": "The exits to take, in order (each is a 'move' with to = its 'to')."
+        }
+      }
+    },
+    "HistoryInfo": {
+      "type": "object",
+      "description": "1.8: GET /v1/api/history. What can be replayed.",
+      "required": [
+        "available",
+        "start",
+        "end",
+        "buckets"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False if nothing was recorded (or the server keeps no database)."
+        },
+        "start": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "The first moment that can be replayed (Unix seconds)."
+        },
+        "end": {
+          "type": "number",
+          "description": "Now (Unix seconds)."
+        },
+        "buckets": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "How many changes happened in each equal slice of start..end (?buckets=N, default 120)."
+        }
+      }
+    },
+    "HistoryFrames": {
+      "type": "object",
+      "description": "1.8: GET /v1/api/history/frames?after=<history id>&limit=N. Recorded changes in order.",
+      "required": [
+        "frames",
+        "more"
+      ],
+      "properties": {
+        "frames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "t"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "History id; pass the last one as `after` to continue."
+              },
+              "t": {
+                "type": "number",
+                "description": "When it happened (Unix seconds)."
+              },
+              "update": {
+                "$ref": "#/$defs/Update"
+              },
+              "world_state": {
+                "$ref": "#/$defs/WorldState",
+                "description": "Instead of `update`: the layout changed here (a house was added or removed); start again from this."
+              }
+            }
+          }
+        },
+        "more": {
+          "type": "boolean",
+          "description": "True if there are more frames after these."
         }
       }
     }

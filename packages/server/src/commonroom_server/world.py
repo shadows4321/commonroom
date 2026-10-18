@@ -22,6 +22,10 @@ from commonroom_protocol import (
 from .clock import WorldClock, crossings
 from .config import AgentSpec, ObjectType, WorldConfig
 
+# How often (real seconds) replay gets a whole world_state to start from; changes in between
+# are recorded one commit at a time.
+KEYFRAME_SECONDS = 15 * 60
+
 # Events that are not kept in the per-room "recent events" memory.
 _NOT_RECENT = {TIME_TICK, TYPING_EVENT}
 
@@ -113,6 +117,9 @@ class World:
         cs = self.settings.clock
         self.clock = WorldClock(cs.start, cs.minutes_per_real_second, cs.tick_minutes)
         self._pending = Batch()
+        self._keyframe_time: float | None = None  # when replay last got a whole world_state
+        self._keyframe_reason = "reload" if carry_over is not None else "start"
+        self._changed_since_keyframe = False  # quiet stretches (only the clock moving) get none
 
         if carry_over is not None:
             loaded = carry_over.saved_state()
@@ -196,8 +203,37 @@ class World:
         """Persist and return everything that changed since the last commit."""
         batch, self._pending = self._pending, Batch()
         if self.store is not None and batch:
-            self.store.save(batch, self.clock.minutes, self.speech_seq)
+            keyframe = None
+            self._changed_since_keyframe |= bool(batch.entities or batch.objects or batch.removed or batch.gone
+                                                 or any(ev.log for ev in batch.events))
+            if self._keyframe_time is None or (self._changed_since_keyframe
+                                               and time.time() - self._keyframe_time >= KEYFRAME_SECONDS):
+                # The first commit of a World (start, or a changed layout), then now and then if
+                # anything happened since: the rows in between rebuild the rest.
+                reason = "periodic" if self._keyframe_time is not None else self._keyframe_reason
+                keyframe = (reason, self.replay_state())
+                self._keyframe_time = time.time()
+                self._changed_since_keyframe = False
+            self.store.save(batch, self.clock.minutes, self.speech_seq, self._frame(batch, keyframe), keyframe)
         return batch
+
+    def _frame(self, batch: Batch, keyframe) -> dict | None:
+        """What viewers saw change, for replay; None if it was only typing."""
+        if not (keyframe or batch.entities or batch.objects or batch.removed or batch.gone
+                or any(ev.log or ev.type == TIME_TICK for ev in batch.events)):
+            return None
+        return {
+            "entities": [self.entity_view(e) for e in batch.entities.values() if e.id in self.entities],
+            "objects": [self.object_view(o, nested=False) for o in batch.objects.values() if o.id in self.objects],
+            "removed": sorted(batch.removed),
+            "gone": sorted(batch.gone),
+        }
+
+    def replay_state(self) -> dict:
+        """The viewers' world_state without recent events, plus the exact clock: a replay keyframe."""
+        state = self.world_state()
+        del state["recent_events"], state["clock"]
+        return {**state, "clock_minutes": self.clock.minutes}
 
     def _emit(self, type_: str, room: str | None, payload: dict, audience: set[str] | None = None,
               private_to: set[str] | None = None, log: bool = True) -> Event:

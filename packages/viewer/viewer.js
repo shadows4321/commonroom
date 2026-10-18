@@ -58,11 +58,24 @@
   let retry = 1000;
   let waitingForLogin = false;
   let usedPassword = false;
+  let socket = null;
+
+  // Replay (1.8): while it shows the past, the live stream is ignored; back to live, a fresh
+  // connection brings the present's world_state.
+  const replay = window.commonroomReplay.create({
+    httpBase,
+    password: () => password,
+    load: (data) => loadState(data),
+    update: (data) => applyUpdate(data),
+    live: () => { const old = socket; connect(); if (old) old.close(); },
+  });
 
   function connect() {
     const ws = new WebSocket(wsUrl);
+    socket = ws;
     ws.onopen = () => { retry = 1000; };
     ws.onclose = () => {
+      if (ws !== socket) return; // replaced (back from a replay)
       setStatus(false);
       if (waitingForLogin) return; // reconnect when the password form is submitted
       setTimeout(connect, retry);
@@ -70,6 +83,7 @@
     };
     ws.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
+      if (replay.active && (data.type === "world_state" || data.type === "update")) return;
       if (data.type === "auth_required") {
         usedPassword = true;
         if (password) ws.send(JSON.stringify({ type: "viewer_auth", password }));
@@ -78,6 +92,7 @@
         setStatus(true);
         $("logout").hidden = !usedPassword;
         loadState(data);
+        replay.ready();
       } else if (data.type === "update") {
         applyUpdate(data);
       } else if (data.type === "error" && data.reason === "unauthorized") {

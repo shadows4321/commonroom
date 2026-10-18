@@ -49,6 +49,19 @@ let waitingForLogin = false;
 let retry = 1000;
 let socket = null;
 
+// Replay (1.8, not on /play): while it shows the past the live stream is ignored, and walks
+// and speech bubbles run as fast as the playback; back to live, a fresh connection brings the
+// present, and everyone jumps there.
+const replay = PLAY ? null : window.commonroomReplay.create({
+  httpBase,
+  password: () => password,
+  load: (data, { seek }) => loadState(data, { jump: seek }),
+  update: (data) => applyUpdate(data),
+  live: () => { jumpNext = true; const old = socket; connect(); if (old) old.close(); },
+});
+let jumpNext = false;
+const timeScale = () => (replay ? replay.timeScale : 1);
+
 function connect() {
   const ws = new WebSocket(`${server}/v${PROTOCOL_MAJOR}/ws/viewer${PLAY ? "?guest=true" : ""}`);
   socket = ws;
@@ -61,6 +74,7 @@ function connect() {
   };
   ws.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
+    if (replay?.active && (data.type === "world_state" || data.type === "update")) return;
     if (data.type === "auth_required") {
       usedPassword = true;
       if (PLAY) ws.send(JSON.stringify({ type: "viewer_auth", guest_password: guest.password, name: guest.name }));
@@ -71,7 +85,9 @@ function connect() {
     } else if (data.type === "world_state") {
       setStatus(true);
       $("logout").hidden = !usedPassword;
-      loadState(data);
+      loadState(data, { jump: jumpNext });
+      jumpNext = false;
+      replay?.ready();
     } else if (data.type === "update") {
       applyUpdate(data);
     } else if (data.type === "error" && data.reason === "unauthorized") {
@@ -653,7 +669,8 @@ class Character {
     this.bubble.className = `bubble ${kind}`;
     this.bubble.hidden = false;
     clearTimeout(this.bubbleTimer);
-    this.bubbleTimer = setTimeout(() => { this.bubble.hidden = true; }, BUBBLE_SECONDS * 1000);
+    const seconds = Math.max(1.5, BUBBLE_SECONDS / timeScale());
+    this.bubbleTimer = setTimeout(() => { this.bubble.hidden = true; }, seconds * 1000);
   }
 }
 
@@ -1198,7 +1215,8 @@ function addChat(ev) {
 
 // -------------------------------------------------------------- streaming
 
-function loadState(data) {
+// `jump`: a different moment (a replay seek, or back to live), so nobody walks there.
+function loadState(data, { jump = false } = {}) {
   const major = parseInt(String(data.protocol).split(".")[0], 10);
   if (major !== PROTOCOL_MAJOR) notice(`This server speaks protocol ${data.protocol}; this viewer expects ${PROTOCOL_MAJOR}.x.`);
   $("world-name").textContent = data.name;
@@ -1209,13 +1227,14 @@ function loadState(data) {
   state.areas = new Map((data.areas || [{ id: "town", kind: "town", name: data.name }]).map((a) => [a.id, a]));
   for (const r of state.rooms.values()) if (!r.area) r.area = "town"; // protocol 1.0/1.1 servers
   state.clock = data.clock;
+  if (jump) $("chat").replaceChildren();
   for (const ev of data.recent_events) addChat(ev);
   renderPeople();
   // A house was added or rebuilt (1.6 world_changed): the models differ from the ones built,
   // so start again. The viewer password is remembered for the tab, so this is seamless.
   const models = [...state.areas.values()].map((a) => `${a.id}=${a.model_url || ""}`).sort().join(" ");
-  if (buildWorld.models != null && buildWorld.models !== models) {
-    location.reload();
+  if (buildWorld.models != null && buildWorld.models !== models && !replay?.active) {
+    location.reload(); // (a replay draws the past with today's models)
     return;
   }
   buildWorld.models ??= models;
@@ -1226,8 +1245,16 @@ function loadState(data) {
     applyTime(state.clock);
     for (const o of state.objects.values()) applyObject(o);
     applyWhen();
-    for (const e of state.entities.values()) syncCharacter(e);
+    for (const id of [...characters.keys()]) if (!state.entities.has(id)) removeCharacter(id);
+    for (const e of state.entities.values()) syncCharacter(e, { teleport: jump });
+    if (jump) { renderPeople(); updateCutaway(); if (inspected) renderInspect(); }
   }
+}
+
+function removeCharacter(id) {
+  const ch = characters.get(id);
+  if (ch) { ch.group.remove(ch.label); scene.remove(ch.group); characters.delete(id); } // label first: that removes its DOM element
+  if (following === id) following = null;
 }
 
 function applyUpdate(data) {
@@ -1235,16 +1262,15 @@ function applyUpdate(data) {
   for (const e of data.entities) state.entities.set(e.id, e);
   for (const id of data.gone || []) { // 1.7: guests who went home
     state.entities.delete(id);
-    const ch = characters.get(id);
-    if (ch) { ch.group.remove(ch.label); scene.remove(ch.group); characters.delete(id); } // label first: that removes its DOM element
-    if (following === id) following = null;
+    removeCharacter(id);
   }
   if (data.gone?.length) renderPeople();
   if (data.objects.length) applyWhen();
   if (data.clock) {
     const phaseChanged = !state.clock || state.clock.phase !== data.clock.phase;
+    const moved = !state.clock || Math.abs(state.clock.minutes - data.clock.minutes) >= 15; // replays carry no ticks
     state.clock = data.clock;
-    if (model.loaded && (phaseChanged || data.events.some((ev) => ev.type === "time_tick"))) applyTime(state.clock);
+    if (model.loaded && (phaseChanged || moved || data.events.some((ev) => ev.type === "time_tick"))) applyTime(state.clock);
     else $("clock").textContent = data.clock.label;
   }
   // Re-place everyone in the rooms that changed (an arrival can shift the others' spots).
@@ -1272,11 +1298,12 @@ const timer = new THREE.Timer();
 let lastFade = 0;
 renderer.setAnimationLoop((now) => {
   timer.update(now);
-  const dt = Math.min(timer.getDelta(), 0.5); // keep walks on time even at a low frame rate
+  const real = Math.min(timer.getDelta(), 0.5); // keep walks on time even at a low frame rate
+  const dt = Math.min(real * timeScale(), 0.5); // and faster during a replay
   for (const ch of characters.values()) ch.update(dt);
   if (following && characters.has(following)) {
     const target = characters.get(following).group.position;
-    const delta = target.clone().sub(controls.target).multiplyScalar(Math.min(1, dt * 4));
+    const delta = target.clone().sub(controls.target).multiplyScalar(Math.min(1, real * 4));
     controls.target.add(delta);
     camera.position.add(delta);
   }

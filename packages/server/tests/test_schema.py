@@ -131,3 +131,21 @@ def test_avatar_status_matches_schema(config, agents, tmp_path):
         validate(client.get(f"{API_PREFIX}/avatar", headers=auth).json(), "AvatarStatus")
         client.put(f"{API_PREFIX}/avatar", content=model(), headers=auth)
         validate(client.get(f"{API_PREFIX}/avatar", headers=auth).json(), "AvatarStatus")
+
+
+def test_replay_matches_schema(config, agents, tmp_path):
+    app = create_app(config, agents, db_path=str(tmp_path / "w.db"), viewer_dir=None, clock_interval=0)
+    with TestClient(app) as client:
+        with client.websocket_connect(f"{API_PREFIX}/ws") as ws:
+            ws.send_json({"type": "register", "id": "r", "protocol": PROTOCOL_VERSION, "token": "tok-mia"})
+            for intent in ({"type": "say", "text": "hello"}, {"type": "move", "to": "north"}):
+                ws.send_json({**intent, "id": intent["type"]})
+                while ws.receive_json().get("id") != intent["type"]:
+                    pass
+        info = client.get(f"{API_PREFIX}/api/history").json()
+        validate(info, "HistoryInfo")
+        state = client.get(f"{API_PREFIX}/api/history/state", params={"at": info["start"]}).json()
+        validate(state)
+        frames = client.get(f"{API_PREFIX}/api/history/frames", params={"after": 0}).json()
+        validate(frames, "HistoryFrames")
+        assert any(f["update"]["events"] for f in frames["frames"] if "update" in f)

@@ -24,6 +24,7 @@ from commonroom_protocol import (
 
 from . import avatars
 from .avatars import AvatarError, AvatarLimits, AvatarStore
+from .clock import clock_view
 from .config import AgentsConfig, AgentSpec, ConfigError, WorldConfig, load_world
 from .scene_import import ImportProblem, install_house, uninstall_house
 from .store import Store
@@ -35,6 +36,7 @@ DEFAULT_VIEWER_DIR = Path(__file__).resolve().parents[3] / "viewer"
 REGISTER_TIMEOUT = 10.0
 MAX_HOUSE_BYTES = 100 * 1024 * 1024  # a house .glb uploaded on /admin
 AUTH_FAILURE_DELAY = 1.0  # seconds; slows down password guessing
+REPLAY_RECENT_EVENTS = 40  # the log a replay starts with
 GUEST_NAME = re.compile(r"[^\W_][\w '.\-]{0,23}")  # 1-24 characters, starting with a letter or digit
 
 try:
@@ -55,6 +57,7 @@ def version_info() -> dict:
             "viewer": f"{API_PREFIX}/ws/viewer",
             "state": f"{API_PREFIX}/api/state",
             "events": f"{API_PREFIX}/api/events",
+            "history": f"{API_PREFIX}/api/history",
             "avatar_upload": f"{API_PREFIX}/avatar",
             "avatar_files": f"{API_PREFIX}/avatars/{{file}}",
             "world_files": f"{API_PREFIX}/world/files/{{path}}",
@@ -313,6 +316,53 @@ def create_app(world_config: WorldConfig, agents: AgentsConfig, db_path: str | N
             return [ev.to_wire(reveal_private=True) for ev in hub.world.global_recent if ev.id > after][:limit]
         reveal = hub.world.settings.viewer_sees_whispers
         return [ev.to_wire(reveal_private=reveal) for ev in store.events(after, min(limit, 1000))]
+
+    # Replay (1.8): the recorded past, for viewers to play back at any speed.
+
+    def replay_world_state(state: dict, recent: list) -> dict:
+        reveal = hub.world.settings.viewer_sees_whispers
+        rest = {k: v for k, v in state.items() if k != "clock_minutes"}
+        return {"type": WORLD_STATE, "protocol": PROTOCOL_VERSION, "server_version": SERVER_VERSION, **rest,
+                "clock": clock_view(state.get("clock_minutes", 0)),
+                "recent_events": [ev.to_wire(reveal_private=reveal) for ev in recent]}
+
+    @app.get(f"{API_PREFIX}/api/history")
+    async def history(request: Request, buckets: int = 120, token: str | None = Query(default=None)):
+        await require_viewer(request, token)
+        span = store.history_span() if store else None
+        now = time.time()
+        if span is None:
+            return {"available": False, "start": None, "end": now, "buckets": []}
+        buckets = min(max(buckets, 1), 1000)
+        return {"available": True, "start": span[0], "end": now, "buckets": store.activity(span[0], now, buckets)}
+
+    @app.get(f"{API_PREFIX}/api/history/state")
+    async def history_state(request: Request, at: float, token: str | None = Query(default=None)):
+        await require_viewer(request, token)
+        state = store.state_at(at) if store else None
+        if state is None:
+            return _problem(404, "no_history", "Nothing has been recorded to replay yet.")
+        return replay_world_state(state, store.events_before(state["at"], REPLAY_RECENT_EVENTS))
+
+    @app.get(f"{API_PREFIX}/api/history/frames")
+    async def history_frames(request: Request, after: int = 0, limit: int = 500,
+                             token: str | None = Query(default=None)):
+        await require_viewer(request, token)
+        if store is None:
+            return _problem(404, "no_history", "This server keeps no history (it runs without a database).")
+        frames, more = store.frames_after(after, min(max(limit, 1), 2000))
+        reveal = hub.world.settings.viewer_sees_whispers
+        out = []
+        for f in frames:
+            if "state" in f:  # the layout changed here (a house was added or removed)
+                out.append({"id": f["id"], "t": f["t"], "world_state": replay_world_state(f["state"], [])})
+                continue
+            update = {"type": UPDATE, "events": [ev.to_wire(reveal_private=reveal) for ev in f["events"]],
+                      "entities": f["entities"], "objects": f["objects"], "clock": clock_view(f["clock_minutes"])}
+            if f["gone"]:
+                update["gone"] = f["gone"]
+            out.append({"id": f["id"], "t": f["t"], "update": update})
+        return {"frames": out, "more": more}
 
     @app.websocket(f"{API_PREFIX}/ws")
     async def agent_socket(ws: WebSocket):
